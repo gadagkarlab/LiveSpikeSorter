@@ -1,0 +1,11 @@
+build*/
+xcode*
+.DS_Store
+.vscode
+.idea
+cmake-build-*
+*.pyc
+Testing/
+*.swp
+*.swo
+*~

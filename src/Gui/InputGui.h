@@ -3,14 +3,14 @@
 
 #include "../Networking/inputParameters.h"
 
-#define _LOCAL_HOST "127.0.0.1"
+#define _LOCAL_HOST "129.236.161.150" // modified this to defauly when i rebuild 
 #define _DEFAULT_MASTER_PORT 8888
 
 // TODO: REMOVE THIS DEPENDENECY, because weird stuff happens when I try to... everything crashes and nothing runs
 // when I change this to something else, and this weird folder will show up as the default for one of the inputs
-#define _FILE_PATH "C:\\SGL_DATA\\01_27_p1_templategeneration_g0\\01_27_p1_templategeneration_g0_imec0\\"
-#define _FOLDER "oss_cont100\\"
-
+#define _FILE_PATH "D:\\"
+//"C:\\SGL_DATA\\01_27_p1_templategeneration_g0\\01_27_p1_templategeneration_g0_imec0\\"
+#define _FOLDER "Lime59_d1_train\\"
 
 class InputGUI {
 private:

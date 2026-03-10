@@ -343,7 +343,7 @@ def run_online_multi():
         arguments['--sdm_ip'] = SDM_IPS
         arguments['--sdm_port'] = SDM_PORTS
 
-    cmd = [r"C:\Users\Spike Sorter\source\repos\OnlineSpikes_v2\x64\RELEASE\OnlineSpikes.exe"]
+    cmd = [r"C:\Users\kesha\OneDrive\Desktop\LiveSpikeSorter\x64\RELEASE\OnlineSpikes.exe"]
     for k, v in arguments.items():
         if isinstance(v, list):
             cmd.append(k)

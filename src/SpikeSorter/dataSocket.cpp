@@ -217,6 +217,9 @@ t_ull StreamDataSocket::fetchEventInfo(int &eventLabel, t_ull lStartCt, OSSSpeci
 	return lLatestCt;
 }
 
+t_ull StreamDataSocket::fetchSyllCode(int )
+
+
 void StreamDataSocket::setDigitalOut(int signal) { 
 	static const int nBits = sizeof(short) * 8; // number bits in a byte = 8
 	bool hiLo;

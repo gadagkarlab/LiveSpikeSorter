@@ -433,10 +433,12 @@ void OnlineSpikesV2::loadTemplatesShape(std::string filepath)
 // TODO: Make this more "conventional"... idk put everything into a JSON instead of a text file or soemthing
 void OnlineSpikesV2::loadKilosortParameters(std::string directoryPath)
 {
-	std::ifstream inf(directoryPath + "misc.txt");
+	std::string miscPath = directoryPath + "misc.txt";
+	std::ifstream inf(miscPath);
 	if (!inf.is_open()) {
-		std::cerr << "Unable to open file " << directoryPath << "/data.txt" << std::endl;
-		exit(EXIT_SUCCESS);
+		std::cerr << "Unable to open file: " << miscPath << "\n";
+		//std::cerr << "cwd: " << std::filesystem::current_path().string() << "\n";
+		std::exit(EXIT_FAILURE);
 	}
 
 	std::map<std::string, std::string> params;
