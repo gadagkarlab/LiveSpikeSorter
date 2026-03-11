@@ -99,6 +99,7 @@ t_ull StreamDataSocket::fetch(std::vector<short> &data, t_sglxconn &S, int strea
 	return lLatestCt;
 }
 
+
 // fetchLatest: lStreamSampleCt (the start of the fetch) can change
 t_ull StreamDataSocket::fetchLatest(float *fData, OSSSpecificParams osParams, t_ull lStartCt) {
 	Timer timer("fetchLatest()");
@@ -154,6 +155,7 @@ t_ull StreamDataSocket::fetchLatest_TC(float *fData, OSSSpecificParams osParams,
 }
 
 
+
 // fetchFromPlace: lStreamSampleCt (the start of the fetch) is constant
 t_ull StreamDataSocket::fetchFromPlace(float *fData, OSSSpecificParams osParams, t_ull lStartCt) {
 	t_ull lLatestCt = getStreamSampleCt(IMEC, osParams);
@@ -179,6 +181,21 @@ t_ull StreamDataSocket::initNidqStream() {
 	//t_ull lLatestSampleCt = getStreamSampleCt(NIDQ);
 	//re
 	return 1;
+}
+
+t_ull StreamDataSocket::fetchNidqFromPlace(float *fData, OSSSpecificParams osParams, t_ull lStartCt){
+	t_ull lLatestCt = getStreamSampleCt(NIDQ, osParams);
+
+	// Limit the fetch amount to the max size
+	t_ull lToGet = min(m_lMaxSize, lLatestCt - lStartCt);
+
+	lLatestCt = fetch(m_sNidqBuffer, S, NIDQ, osParams.substream, lStartCt, lToGet, osParams.vImecChannels);// hard code in digital params 
+
+	//Fill data buffer with m_sFetchBuffer
+	for (long lI = 0; lI < lToGet * osParams.lNChans; lI++)
+		fData[lI] = (float)m_sNidqBuffer[lI];
+
+	return lLatestCt;
 }
 
 // fetch the NIDQ data and extract stimulus event time and label (if they exist)
@@ -217,8 +234,7 @@ t_ull StreamDataSocket::fetchEventInfo(int &eventLabel, t_ull lStartCt, OSSSpeci
 	return lLatestCt;
 }
 
-t_ull StreamDataSocket::fetchSyllCode(int )
-
+//fetch & translate digital syllable code 
 
 void StreamDataSocket::setDigitalOut(int signal) { 
 	static const int nBits = sizeof(short) * 8; // number bits in a byte = 8

@@ -30,6 +30,7 @@ public:
 	virtual t_ull   fetchLatest(float *fData, OSSSpecificParams osParams, t_ull lStartCt = ULLONG_MAX) = 0;
 	virtual t_ull	fetchLatest_TC(float *fData, OSSSpecificParams osParams, t_ull lStartCt = ULLONG_MAX) = 0;
 	virtual t_ull   fetchFromPlace(float *fData, OSSSpecificParams osParams, t_ull lStartCt) = 0;
+	virtual t_ull   fetchNidqFromPlace(float *fData, OSSSpecificParams osParams, t_ull lStartCt) = 0;
 	virtual t_ull	initNidqStream() = 0;
 	virtual t_ull	fetchEventInfo(int &eventLabel, t_ull lStartCt, OSSSpecificParams osParams) = 0;
 	virtual void	setDigitalOut(int signal = 0) {};
@@ -69,6 +70,7 @@ public:
 	t_ull   fetchLatest(float *fData, OSSSpecificParams osParams, t_ull lStartCt = ULLONG_MAX);
 	t_ull	fetchLatest_TC(float *fData, OSSSpecificParams osParams, t_ull lStartCt = ULLONG_MAX);
 	t_ull   fetchFromPlace(float *fData, OSSSpecificParams osParams, t_ull lStartCt);
+	t_ull   fetchNidqFromPlace(float *fData, OSSSpecificParams osParams, t_ull lStartCt);
 	t_ull	initNidqStream();
 	t_ull	fetchEventInfo(int &eventLabel, t_ull lStartCt, OSSSpecificParams osParams);
 	void	setDigitalOut(int signal = 0);

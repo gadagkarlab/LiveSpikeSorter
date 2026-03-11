@@ -32,6 +32,11 @@ public:
 	OnlineSpikesV2(InputParameters Params, sockaddr_in mainAddr, DataSocket* m_NC);
 	~OnlineSpikesV2();
 	void runSpikeSorting();
+	
+	void runSpikeSortingAndSyllDetect();
+
+	
+	// to do implement? void runTriggeredSpikeSorting(std::string digLine, std::vector<long> trig_nPulses,  )
 
 private:
 	void initializeSorter(InputParameters params);
