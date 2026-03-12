@@ -13,6 +13,7 @@
 #include <iterator>
 #include <chrono>
 #include <queue>
+#include <unordered_set>
 #include <algorithm>
 #include <typeinfo>
 #include <vector>
@@ -628,6 +629,214 @@ void OnlineSpikesV2::loadKilosortClusteringData(std::string directoryPath)
 	}
 }
 
+void OnlineSpikesV2::countNidqRisingEdgesInBuffer(const float* fetchBuf,t_ull processedCt,t_ull nFetched,bool& prevHigh,int& edgeCount,std::vector<t_ull>& edgeTimes)
+{
+	edgeCount = 0;
+	edgeTimes.clear();
+
+	for (t_ull i = 0; i < nFetched; ++i) {
+		bool high = (fetchBuf[i] != 0.0f);   // replace with bit test 
+
+		if (!prevHigh && high) {
+			++edgeCount;
+			edgeTimes.push_back(processedCt + i);
+		}
+
+		prevHigh = high;
+	}
+}
+
+
+void OnlineSpikesV2::runSyllDetectThenSorting(std::vector<int> targetPulseCounts, float delay1_ms, float delay2_ms, float delay3_ms, std::unordered_set<int> targetTemplates, int matchesThreshold) {
+	
+	static const char *ptLabel = { "OnlineSpikesV2::runSyllDetectThenSorting" };
+	
+	long 	processedCt, // Most recent stream sample count that has been processed
+		allowedCt, // Samples we are behind
+		skipCounter = 0, // Number of times we skipped
+		currBatchNumSamples; // Number of samples in current batch
+
+	bool prevHigh= false;
+	int edgeCount = 0;
+	std::vector<t_ull> edgeTimes; 
+	std::deque<t_ull> recentEdges;
+	t_ull pulseWindowSamples = static_cast<t_ull>(0.003 * NIsamplingRate);  // 3 ms window to check for pulses 
+
+	t_ull syllImCt,
+		targStartCt,
+		targEndCt,
+		FeedbackCt;
+
+	int templateMatches=0;
+
+	float	p2p; // peak-to-peak data to be sent to decoder
+	std::vector<float> p2ps(C, 0); // per-channel peak-to-peak data to be sent to decoder
+
+	// whether we performed any skipping during the current batch
+	bool skip = false;
+
+	// timespec's to keep track of processing time to be sent to the Decoder
+	struct timespec batchBefore, batchAfter;
+
+	// Vectors to store the spike times, templates, and amplitudes to be sent to the Decoder
+	std::vector<long> times;
+	std::vector<long> templates;
+	std::vector<float> amplitudes;
+	memset(lastSpikeTime.data(), 0, sizeof(long) * T);
+
+	// Parameters specific to each individual OSS during parallelization
+	OSSSpecificParams osParams = {
+		C,
+		channelMap,
+		substream
+	};
+
+	// open NI Stream 
+	sglxSock->initNidqStream();
+	latestCt = sglxSock->getStreamSampleCt(NIDQ, osParams);
+	processedCt = latestCt;
+	while (true) {
+		//assuming i never fall behind the NIstream 
+		latestCt = sglxSock->getStreamSampleCt(NIDQ, osParams);
+		allowedCt = latestCt - timeBehind * NIsamplingRate / 1000;
+
+
+		latestCt = sglxSock->fetchNidqLatest(fetchBuf, osParams, processedCt);
+
+		t_ull nFetched = latestCt - processedCt;
+
+		countNidqRisingEdgesInBuffer(fetchBuf, processedCt, nFetched, prevHigh, edgeCount, edgeTimes);
+
+		processedCt = latestCt;
+
+		for (t_ull edgeT : edgeTimes) {
+			recentEdges.push_back(edgeT);
+
+			while (!recentEdges.empty() &&
+				edgeT - recentEdges.front() > pulseWindowSamples) {
+				recentEdges.pop_front();
+			}
+
+			int pulsesInWindow = recentEdges.size();
+			
+
+			if (std::find(targetPulseCounts.begin(),
+				targetPulseCounts.end(),
+				pulsesInWindow) == targetPulseCounts.end()) {
+				continue;
+			}
+			//im now in a syllable i want to get ready for sorting !
+			syllImCt = sglxSock->getStreamSampleCt(IMEC, osParams); // get imec sample index as soon as i detect a syllable
+			targStartCt = syllImCt + (delay1_ms * IMsamplingRate / 1000) - 40;// sample indices i want to sort 
+			targEndCt = syllImCt + (delay2_ms * IMsamplingRate / 1000) + 40;
+			FeedbackCt = syllImCt + (delay3_ms * IMsamplingRate / 1000);
+
+			sglxSock->waitUntil(targEndCt + 40, osParams); // rough wait until samples should b ready 
+			currBatchNumSamples = targEndCt - targStartCt;
+
+
+			times.clear();
+			templates.clear();
+			amplitudes.clear();
+
+			sglxSock->fetchImecExact(fetchBuf + currBatchNumSamples * C, osParams, targStartCt, targEndCt);
+
+			//everything below is copied from the original spike sorting function
+			{
+				Timer timer("cpu to gpu");
+				/*
+				The data received from SpikeGLX in d_fetchBuf is currently arranged such that SAMPLES are contiguous, i.e.
+				d_fetchBuf[t + chan * currBatchNumSamples] corresponds to sample t, channel chan
+			*/
+
+				if (skip) {
+					// Skip the last minScanWindow of previous batch (the first m_lMinWindow * m_lC bits)
+					_CUDA_CALL(cudaMemcpy(d_fetchBuf, fetchBuf + currBatchNumSamples * C, C * currBatchNumSamples * sizeof(float), cudaMemcpyHostToDevice));
+
+					// Increment skip counter
+					skipCounter++;
+				}
+				else {
+					_CUDA_CALL(cudaMemcpy(d_fetchBuf, fetchBuf, C * currBatchNumSamples * sizeof(float), cudaMemcpyHostToDevice));
+				}
+				_CUDA_CALL(cudaDeviceSynchronize());
+			}
+			// Calculate peak-to-peak for OutputGUI
+			// TODO: Try and make it compute P2P per channel, send it to the GUI, write GUI to display per-channel P2P, and then 
+			//			make sure the computations for P2P per channel is fast by writing custom kernel
+			p2p = P2P_calc(d_fetchBuf, C * currBatchNumSamples);
+			// Remove means
+			_CUDA_CALL(cudaMemset(d_means, 0, C * sizeof(float)));
+			{
+				Timer timer("meanRemove()");
+				meanRemove(d_fetchBuf, d_means, currBatchNumSamples, C);
+			}
+			_CUDA_CALL(cudaDeviceSynchronize());
+			// Median removal
+			{
+				Timer timer("medianRemove()");
+				medianRemove(d_fetchBuf, C, currBatchNumSamples);
+			}
+			_CUDA_CALL(cudaDeviceSynchronize());
+			// Perform a high-pass filter at 300 hz assuming the signal is at 30000 hz
+			{
+				Timer timer("highpassFilter()");
+				transpose(d_fetchBuf, d_fetchBuf2, currBatchNumSamples, C);
+				highpassFilter(d_fetchBuf2, C, currBatchNumSamples, IMsamplingRate, 300);
+			}
+			_CUDA_CALL(cudaDeviceSynchronize());
+			// Whiten the batch on device (THIS WORKS FOR SURE, DO NOT TOUCH OR WORRY ABOUT IT)
+			{
+				Timer timer("whitening()");
+				matMul(cublasHandle, d_whitening, d_fetchBuf2, d_fetchBuf, C, C, currBatchNumSamples);
+			}
+			_CUDA_CALL(cudaDeviceSynchronize());
+			// Drift correct
+			{
+				Timer timer("driftCorrection()");
+				matMul(cublasHandle, d_driftMatrix, d_fetchBuf, d_fetchBuf2, C, C, currBatchNumSamples);
+			}
+			_CUDA_CALL(cudaDeviceSynchronize());
+			// Perform OMP
+			numSpikes = kilosortMatchingPursuit(d_fetchBuf2, currBatchNumSamples);
+			// Use results of OMP to assign unmapped spike templates to the closest clusters
+			// - inputs: d_spikeTemplates, d_spikeTimes, d_residual
+			// - outputs: closest_x, closest_y
+			{
+				Timer timer("closestCluster()");
+				computeClosestClusters(currBatchNumSamples, numSpikes);
+			}
+
+			// Save the spikes into times, templates, amplitudes
+			saveSpikes(numSpikes, targEndCt - currBatchNumSamples + 1, currBatchNumSamples - minWindow, times, templates, amplitudes);
+
+			int templateMatches = 0;
+			for (int templ : templates) {
+				if (targetTemplates.count(templ)) {
+					++templateMatches;
+				}
+			}
+			std::cout << "template matches = " << templateMatches
+				<< " after NI edge sample " << edgeT
+				<< " IM window [" << targStartCt
+				<< ", " << targEndCt << "]" << std::endl;
+
+			if (templateMatches >= matchesThreshold) {
+				while (sglxSock->getStreamSampleCt(IMEC, osParams) < FeedbackCt) {
+					//waiting for feedback windowstart
+				}
+				//now we've passed the required feedback time
+				sglxSock->setDigitalOut(0);//fxn autosets line hi->lo
+			}
+			//failed template check
+			processedCt = sglxSock->getStreamSampleCt(NIDQ, osParams);
+			recentEdges.clear();
+			break;
+		}
+	}
+
+}
+
 void OnlineSpikesV2::runSpikeSorting()
 {
 	static const char *ptLabel = { "OnlineSpikesV2::runSpikeSorting" };
@@ -673,7 +882,7 @@ void OnlineSpikesV2::runSpikeSorting()
 
 		// Update latest count to determine window size
 		latestCt = sglxSock->getStreamSampleCt(IMEC, osParams);
-		allowedCt = latestCt - timeBehind * samplingRate / 1'000;
+		allowedCt = latestCt - timeBehind * samplingRate / 1000;
 
 		if ((latestCt - processedCt) <= maxWindow) {
 			latestCt = sglxSock->fetchLatest(fetchBuf, osParams, processedCt);
@@ -817,7 +1026,6 @@ void OnlineSpikesV2::runSpikeSorting()
 		amplitudes.clear();
 	}
 }
-
 
 void OnlineSpikesV2::computeClosestClusters(long currBatchNumSamples, long numSpikes)
 {

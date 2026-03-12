@@ -11,6 +11,8 @@
 #define _FILE_PATH "D:\\"
 //"C:\\SGL_DATA\\01_27_p1_templategeneration_g0\\01_27_p1_templategeneration_g0_imec0\\"
 #define _FOLDER "Lime59_d1_train\\"
+//#define _FILE_PATH "Z:\GadagkarLab\Keshav\Code\livespikesorter\data"
+//#define _FOLDER "Lime59_d1_train\\"
 
 class InputGUI {
 private:

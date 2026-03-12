@@ -32,7 +32,8 @@ StreamDataSocket::StreamDataSocket(std::string accquisitionHost, uint16 accquisi
 	, m_uPort(accquisitionPort)
 	, m_iSubstream(substream)
 	//, m_vImecChannels(channelMap, channelMap + lNChans) // Fill vector with values of *int array
-	, m_vNidqChannels({8}) // Extracting only the digital line (the 9th line) from nidq
+	//NI DIG LINE IS HARDCODED HERE for me it should be 3rd bc i have 2 analog chans, 0 indexed !
+	, m_vNidqChannels({2}) // Extracting only the digital line
 {
 	static const char *ptLabel = { "StreamDataSocket::StreamDataSocket" };
 
@@ -49,8 +50,6 @@ StreamDataSocket::StreamDataSocket(std::string accquisitionHost, uint16 accquisi
 		_RUN_ERROR(ptLabel, "Couldn't establish connection");
 	}
 };
-
-
 StreamDataSocket::~StreamDataSocket() {
 	disconnect();
 };
@@ -98,7 +97,6 @@ t_ull StreamDataSocket::fetch(std::vector<short> &data, t_sglxconn &S, int strea
 	//m_mSGlxMutex.unlock();
 	return lLatestCt;
 }
-
 
 // fetchLatest: lStreamSampleCt (the start of the fetch) can change
 t_ull StreamDataSocket::fetchLatest(float *fData, OSSSpecificParams osParams, t_ull lStartCt) {
@@ -154,8 +152,6 @@ t_ull StreamDataSocket::fetchLatest_TC(float *fData, OSSSpecificParams osParams,
 	return lLatestCt,lToGet;
 }
 
-
-
 // fetchFromPlace: lStreamSampleCt (the start of the fetch) is constant
 t_ull StreamDataSocket::fetchFromPlace(float *fData, OSSSpecificParams osParams, t_ull lStartCt) {
 	t_ull lLatestCt = getStreamSampleCt(IMEC, osParams);
@@ -172,6 +168,17 @@ t_ull StreamDataSocket::fetchFromPlace(float *fData, OSSSpecificParams osParams,
 	return lLatestCt;
 }
 
+t_ull StreamDataSocket::fetchImecExact(float *fData, OSSSpecificParams osParams, t_ull lStartCt, t_ull lEndCt)
+{
+	t_ull lToGet = lEndCt - lStartCt;
+	fetch(m_sFetchBuffer, S, IMEC, osParams.substream, lStartCt, lToGet, osParams.vImecChannels);
+
+	//Fill data buffer with m_sFetchBuffer
+	for (long lI = 0; lI < lToGet * osParams.lNChans; lI++)
+		fData[lI] = (float)m_sFetchBuffer[lI];
+
+}
+
 t_ull StreamDataSocket::initNidqStream() {
 	/* Wait some time before starting NIDQ stream fetching to avoid SpikeGLX errors.
 	If you are receiving "[FETCH: Too late.]" error messages from
@@ -183,18 +190,27 @@ t_ull StreamDataSocket::initNidqStream() {
 	return 1;
 }
 
-t_ull StreamDataSocket::fetchNidqFromPlace(float *fData, OSSSpecificParams osParams, t_ull lStartCt){
+t_ull StreamDataSocket::fetchNidqLatest(float *fData, OSSSpecificParams osParams, t_ull lStartCt,int m_nMaxSize, int m_nMinSize){
+	//just copied from fetchLatest need to figure out how to get the right bit for my digline. this assumes i will never fall behind 
+	
 	t_ull lLatestCt = getStreamSampleCt(NIDQ, osParams);
 
-	// Limit the fetch amount to the max size
-	t_ull lToGet = min(m_lMaxSize, lLatestCt - lStartCt);
+	t_ull lToGet = lLatestCt - lStartCt;
+	if (lStartCt == ULLONG_MAX) {
+		lToGet = m_nMinSize;
+	}
 
-	lLatestCt = fetch(m_sNidqBuffer, S, NIDQ, osParams.substream, lStartCt, lToGet, osParams.vImecChannels);// hard code in digital params 
+	if (lToGet > m_nMaxSize) {
+		lToGet = m_nMaxSize;
+	}
 
-	//Fill data buffer with m_sFetchBuffer
-	for (long lI = 0; lI < lToGet * osParams.lNChans; lI++)
+	lStartCt = lLatestCt - lToGet;
+	lLatestCt = fetch(m_sNidqBuffer, S, NIDQ, 0, lStartCt, lToGet, m_vNidqChannels);// hard code in digital params 
+
+	//Fill fData with m_sNidqBuffer's contents- hardcoded for just 1 NI line buffer should b ok 
+	for (long lI = 0; lI < lToGet * 1; lI++) {
 		fData[lI] = (float)m_sNidqBuffer[lI];
-
+	}
 	return lLatestCt;
 }
 
@@ -221,7 +237,6 @@ t_ull StreamDataSocket::fetchEventInfo(int &eventLabel, t_ull lStartCt, OSSSpeci
 	for (int i = 0; i < m_sNidqBuffer.size(); i++) {
 		if (m_sNidqBuffer[i]==2||m_sNidqBuffer[i]==4) {
 			eventLabel = m_sNidqBuffer[i];
-			
 			std::cout << eventLabel;
 			efficientWait(100);
 			//std::cout << "TRIAL!";
@@ -245,9 +260,8 @@ void StreamDataSocket::setDigitalOut(int signal) {
 	if (signal==0)
 	{
 		std::cout << "Hello 4";
-		sglx_setDigitalOut(S, 1, "PXI1Slot2/port1/line1");
-		efficientWait(100);
-		sglx_setDigitalOut(S, 0, "PXI1Slot2/port1/line1");
+		sglx_setDigitalOut(S, 1, "PXI1Slot6/port0/line5");//dig line is hardcoded here 
+		sglx_setDigitalOut(S, 0, "PXI1Slot6/port0/line5");
 
 		}
 	if (signal==1)
@@ -258,6 +272,7 @@ void StreamDataSocket::setDigitalOut(int signal) {
 		sglx_setDigitalOut(S, 0, "PXI1Slot2/port1/line2");
 		
 	}
+
 	// feedbackSignal == 0 signifies setting nidq stream out back to 0
 
 	/*std::string binaryFeedbackSignal = std::bitset<nBits>(signal).to_string();

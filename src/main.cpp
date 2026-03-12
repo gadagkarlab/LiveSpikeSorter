@@ -1,4 +1,10 @@
-﻿#include <experimental/filesystem>
+﻿
+
+#include <algorithm>
+#include <iostream>
+#include <fstream>
+
+#include <experimental/filesystem>
 
 #include "SpikeSorter/OnlineSpikes.h"
 #include "SpikeSorter/OnlineSpikesV2.h"
@@ -14,7 +20,6 @@
 
 #include <npp.h> // to get the number of GPU devices
 
-#include <algorithm>
 
 //Check if we are not in the .exe folder. A bit ugly, but it works
 void exeFolderSetup() {
@@ -37,7 +42,8 @@ void exeFolderSetup() {
 void runOSSParallel(sockaddr_in mainAddr, InputParameters params, DataSocket* sharedSocket) {
 	try {
 		OnlineSpikesV2 oSpikeSorter(params, mainAddr, sharedSocket);
-		oSpikeSorter.runSpikeSorting();
+		//oSpikeSorter.runSpikeSorting();
+		oSpikeSorter.runSyllDetectThenSorting({ 1 }, 5.0, 15.0, 20.0, {1,2,3,10,12 }, 2);
 	}
 	catch (const std::exception& e) {
 		std::cerr << "Exception caught: " << e.what() << std::endl;
@@ -259,6 +265,20 @@ InputParameters parseCmdArgs(int argc, char* argv[]) {
 //
 // ------------------------------------------------------------------------------
 int main(int argc, char* argv[]) {
+	std::ofstream logFile("run.log");
+
+	// Check if the file opened successfully
+	if (!logFile.is_open()) {
+		std::cerr << "Unable to open log file!" << std::endl;
+		return 1;
+	}
+	// Back up the original buffer of std::cout
+	std::streambuf* originalCoutBuffer = std::cout.rdbuf();
+	// Redirect std::cout to the log file
+	std::cout.rdbuf(logFile.rdbuf());
+	// Now, anything you print using std::cout will go to the log file
+	std::cout << "LOG FILE CAPTURES COUT" << std::endl;
+
 	exeFolderSetup(); // TODO check if this is necessary
 
 	// Parse command line arguments and then autopopulate the input GUI with them
@@ -333,5 +353,6 @@ int main(int argc, char* argv[]) {
 		decoderThreads[i].join();
 	}
 	
+	logFile.close();
 	return 0;
 }
