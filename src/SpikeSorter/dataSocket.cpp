@@ -33,7 +33,7 @@ StreamDataSocket::StreamDataSocket(std::string accquisitionHost, uint16 accquisi
 	, m_iSubstream(substream)
 	//, m_vImecChannels(channelMap, channelMap + lNChans) // Fill vector with values of *int array
 	//NI DIG LINE IS HARDCODED HERE for me it should be 3rd bc i have 2 analog chans, 0 indexed !
-	, m_vNidqChannels({2}) // Extracting only the digital line
+	, m_vNidqChannels({8}) // Extracting only the digital line
 {
 	static const char *ptLabel = { "StreamDataSocket::StreamDataSocket" };
 
@@ -205,11 +205,16 @@ t_ull StreamDataSocket::fetchNidqLatest(float *fData, OSSSpecificParams osParams
 	}
 
 	lStartCt = lLatestCt - lToGet;
-	lLatestCt = fetch(m_sNidqBuffer, S, NIDQ, 0, lStartCt, lToGet, m_vNidqChannels);// hard code in digital params 
 
-	//Fill fData with m_sNidqBuffer's contents- hardcoded for just 1 NI line buffer should b ok 
-	for (long lI = 0; lI < lToGet * 1; lI++) {
-		fData[lI] = (float)m_sNidqBuffer[lI];
+
+	lLatestCt = fetch(m_sNidqBuffer, S, NIDQ, 0, lStartCt, lToGet, m_vNidqChannels);// hard code in digital params 
+	
+	constexpr int bitIdx = 3;// hardcoded line i expect my syll code to come on 
+	//Fill fData with m_sNidqBuffer's contents after selecting my digital word buffer should b ok 
+	for (t_ull lI = 0; lI < lToGet; ++lI) {
+		uint16_t word = static_cast<uint16_t>(m_sNidqBuffer[lI]);
+		int bitVal = (word >> bitIdx) & 1;
+		fData[lI] = static_cast<float>(bitVal);
 	}
 	return lLatestCt;
 }

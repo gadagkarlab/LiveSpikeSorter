@@ -20,6 +20,9 @@
 #include <thread>
 #include "../Helpers/Timer.h"
 #include <fstream>
+#include <bitset>
+
+
 
 #ifdef WINDOWS
 #include <windows.h>
@@ -635,7 +638,7 @@ void OnlineSpikesV2::countNidqRisingEdgesInBuffer(const float* fetchBuf,t_ull pr
 	edgeTimes.clear();
 
 	for (t_ull i = 0; i < nFetched; ++i) {
-		bool high = (fetchBuf[i] != 0.0f);   // replace with bit test 
+		bool high = (fetchBuf[i] != 0.5f);   
 
 		if (!prevHigh && high) {
 			++edgeCount;
