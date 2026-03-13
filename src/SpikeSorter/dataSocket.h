@@ -74,13 +74,13 @@ public:
 	t_ull   getStreamSampleCt(int streamType, OSSSpecificParams osParams);
 	t_ull   fetchLatest(float *fData, OSSSpecificParams osParams, t_ull lStartCt = ULLONG_MAX);
 	t_ull	fetchLatest_TC(float *fData, OSSSpecificParams osParams, t_ull lStartCt = ULLONG_MAX);
-	t_ull   fetchFromPlace(float *fData, OSSSpecificParams osParams, t_ull lStartCt);
-	t_ull	fetchImecExact(float *fData, OSSSpecificParams osParams, t_ull lStartCt, t_ull lEndCt); 
-	t_ull   fetchNidqLatest(float *fData, OSSSpecificParams osParams, t_ull lStartCt = ULLONG_MAX, int m_nMaxSize = 1500, int m_nMinSize = 40);
+	t_ull   fetchFromPlace(float *fData, OSSSpecificParams osParams, t_ull lStartCt); 
+	t_ull	fetchImecExact(float *fData, OSSSpecificParams osParams, t_ull lStartCt, t_ull lEndCt); // KS fxn
+	t_ull   fetchNidqLatest(float *fData, OSSSpecificParams osParams, t_ull lStartCt = ULLONG_MAX, int m_nMaxSize = 1500, int m_nMinSize = 40);// KS fxn
 	t_ull	initNidqStream();
 	t_ull	fetchEventInfo(int &eventLabel, t_ull lStartCt, OSSSpecificParams osParams);
 
-	void	setDigitalOut(int signal = 0);
+	void	setDigitalOut(int signal = 0);// KS to dbl check 
 
 	bool   isRunning();
 	bool   startRun();

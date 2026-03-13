@@ -32,8 +32,8 @@ StreamDataSocket::StreamDataSocket(std::string accquisitionHost, uint16 accquisi
 	, m_uPort(accquisitionPort)
 	, m_iSubstream(substream)
 	//, m_vImecChannels(channelMap, channelMap + lNChans) // Fill vector with values of *int array
-	//NI DIG LINE IS HARDCODED HERE for me it should be 3rd bc i have 2 analog chans, 0 indexed !
-	, m_vNidqChannels({8}) // Extracting only the digital line
+	// KS - NI DIG LINE IS HARDCODED HERE for me it should be 3rd bc i have 2 analog chans, 0 indexed !
+	, m_vNidqChannels({8}) // Extracting only the digital line, for NISIM its the chan 8
 {
 	static const char *ptLabel = { "StreamDataSocket::StreamDataSocket" };
 
@@ -168,6 +168,7 @@ t_ull StreamDataSocket::fetchFromPlace(float *fData, OSSSpecificParams osParams,
 	return lLatestCt;
 }
 
+//KS fxn - trying to get IMEC buffer with exact times for sorting 
 t_ull StreamDataSocket::fetchImecExact(float *fData, OSSSpecificParams osParams, t_ull lStartCt, t_ull lEndCt)
 {
 	t_ull lToGet = lEndCt - lStartCt;
@@ -190,6 +191,8 @@ t_ull StreamDataSocket::initNidqStream() {
 	return 1;
 }
 
+
+//KS made based on StreamDataSocket::fetchLatest
 t_ull StreamDataSocket::fetchNidqLatest(float *fData, OSSSpecificParams osParams, t_ull lStartCt,int m_nMaxSize, int m_nMinSize){
 	//just copied from fetchLatest need to figure out how to get the right bit for my digline. this assumes i will never fall behind 
 	
@@ -256,6 +259,7 @@ t_ull StreamDataSocket::fetchEventInfo(int &eventLabel, t_ull lStartCt, OSSSpeci
 
 //fetch & translate digital syllable code 
 
+//KS needs to check the lines I use and make sure it works. this uses a much older form of the API and im moderately concerened neweer SGLx wont support it
 void StreamDataSocket::setDigitalOut(int signal) { 
 	static const int nBits = sizeof(short) * 8; // number bits in a byte = 8
 	bool hiLo;

@@ -632,6 +632,7 @@ void OnlineSpikesV2::loadKilosortClusteringData(std::string directoryPath)
 	}
 }
 
+//KS-fxn i feel like this shouldnt be calling edgeTimes.clear() every time in the case that my pulses span multiple buffers?
 void OnlineSpikesV2::countNidqRisingEdgesInBuffer(const float* fetchBuf,t_ull processedCt,t_ull nFetched,bool& prevHigh,int& edgeCount,std::vector<t_ull>& edgeTimes)
 {
 	edgeCount = 0;
@@ -649,7 +650,7 @@ void OnlineSpikesV2::countNidqRisingEdgesInBuffer(const float* fetchBuf,t_ull pr
 	}
 }
 
-
+//KS-mainfxn 
 void OnlineSpikesV2::runSyllDetectThenSorting(std::vector<int> targetPulseCounts, float delay1_ms, float delay2_ms, float delay3_ms, std::unordered_set<int> targetTemplates, int matchesThreshold) {
 	
 	static const char *ptLabel = { "OnlineSpikesV2::runSyllDetectThenSorting" };
@@ -663,7 +664,7 @@ void OnlineSpikesV2::runSyllDetectThenSorting(std::vector<int> targetPulseCounts
 	int edgeCount = 0;
 	std::vector<t_ull> edgeTimes; 
 	std::deque<t_ull> recentEdges;
-	t_ull pulseWindowSamples = static_cast<t_ull>(0.003 * NIsamplingRate);  // 3 ms window to check for pulses 
+	t_ull pulseWindowSamples = static_cast<t_ull>(0.003 * NIsamplingRate);  //KS- 3 ms window to check for pulses, placeholder val realistically i think itll be 1ms
 
 	t_ull syllImCt,
 		targStartCt,
@@ -708,7 +709,7 @@ void OnlineSpikesV2::runSyllDetectThenSorting(std::vector<int> targetPulseCounts
 
 		t_ull nFetched = latestCt - processedCt;
 
-		countNidqRisingEdgesInBuffer(fetchBuf, processedCt, nFetched, prevHigh, edgeCount, edgeTimes);
+		countNidqRisingEdgesInBuffer(fetchBuf, processedCt, nFetched, prevHigh, edgeCount, edgeTimes);//KS- this buffer is the only digital bit i care about
 
 		processedCt = latestCt;
 
@@ -716,7 +717,7 @@ void OnlineSpikesV2::runSyllDetectThenSorting(std::vector<int> targetPulseCounts
 			recentEdges.push_back(edgeT);
 
 			while (!recentEdges.empty() &&
-				edgeT - recentEdges.front() > pulseWindowSamples) {
+				edgeT - recentEdges.front() > pulseWindowSamples) { //KS- feels like this is not robust? 
 				recentEdges.pop_front();
 			}
 
@@ -734,7 +735,7 @@ void OnlineSpikesV2::runSyllDetectThenSorting(std::vector<int> targetPulseCounts
 			targEndCt = syllImCt + (delay2_ms * IMsamplingRate / 1000) + 40;
 			FeedbackCt = syllImCt + (delay3_ms * IMsamplingRate / 1000);
 
-			sglxSock->waitUntil(targEndCt + 40, osParams); // rough wait until samples should b ready 
+			sglxSock->waitUntil(targEndCt + 40, osParams); // rough wait until samples should b ready, is there any better way to do it? 
 			currBatchNumSamples = targEndCt - targStartCt;
 
 
@@ -744,7 +745,7 @@ void OnlineSpikesV2::runSyllDetectThenSorting(std::vector<int> targetPulseCounts
 
 			sglxSock->fetchImecExact(fetchBuf + currBatchNumSamples * C, osParams, targStartCt, targEndCt);
 
-			//everything below is copied from the original spike sorting function
+			//KS-everything below is copied from the original spike sorting function
 			{
 				Timer timer("cpu to gpu");
 				/*
@@ -795,7 +796,7 @@ void OnlineSpikesV2::runSyllDetectThenSorting(std::vector<int> targetPulseCounts
 			}
 			_CUDA_CALL(cudaDeviceSynchronize());
 			// Drift correct
-			{
+			{	//KS im also worried about doing this drift from my morning recording is likely to be much worse than later in the day.
 				Timer timer("driftCorrection()");
 				matMul(cublasHandle, d_driftMatrix, d_fetchBuf, d_fetchBuf2, C, C, currBatchNumSamples);
 			}
@@ -806,7 +807,7 @@ void OnlineSpikesV2::runSyllDetectThenSorting(std::vector<int> targetPulseCounts
 			// - inputs: d_spikeTemplates, d_spikeTimes, d_residual
 			// - outputs: closest_x, closest_y
 			{
-				Timer timer("closestCluster()");
+				Timer timer("closestCluster()");// KS- im worried about this function is it just estimating spike positions? 
 				computeClosestClusters(currBatchNumSamples, numSpikes);
 			}
 
@@ -823,17 +824,19 @@ void OnlineSpikesV2::runSyllDetectThenSorting(std::vector<int> targetPulseCounts
 				<< " after NI edge sample " << edgeT
 				<< " IM window [" << targStartCt
 				<< ", " << targEndCt << "]" << std::endl;
-
+			//does this loop break do what i think its doiung??? 
 			if (templateMatches >= matchesThreshold) {
 				while (sglxSock->getStreamSampleCt(IMEC, osParams) < FeedbackCt) {
-					//waiting for feedback windowstart
+					//keep getting sample count until i pass feedback time 
 				}
 				//now we've passed the required feedback time
 				sglxSock->setDigitalOut(0);//fxn autosets line hi->lo
+				recentEdges.clear();
+				processedCt = sglxSock->getStreamSampleCt(NIDQ, osParams);
 			}
-			//failed template check
-			processedCt = sglxSock->getStreamSampleCt(NIDQ, osParams);
+			//failed template 
 			recentEdges.clear();
+			processedCt = sglxSock->getStreamSampleCt(NIDQ, osParams);
 			break;
 		}
 	}

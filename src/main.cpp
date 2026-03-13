@@ -39,6 +39,8 @@ void exeFolderSetup() {
 	}
 }
 
+
+// KS- this is entry point for MY new sorting function- recompile to swap between the original vs mine, need an way to input params/ pick between 2 modes 
 void runOSSParallel(sockaddr_in mainAddr, InputParameters params, DataSocket* sharedSocket) {
 	try {
 		OnlineSpikesV2 oSpikeSorter(params, mainAddr, sharedSocket);
@@ -281,7 +283,7 @@ int main(int argc, char* argv[]) {
 
 	exeFolderSetup(); // TODO check if this is necessary
 
-	// Parse command line arguments and then autopopulate the input GUI with them
+	// Parse command line arguments and then autopopulate the input GUI with them-- KS things this is where to add extra params? 
 	InputParameters cmdLineParams = parseCmdArgs(argc, argv);
 	Gui gui(cmdLineParams);
 
@@ -325,6 +327,8 @@ int main(int argc, char* argv[]) {
 	}
 
 
+
+	// KS wonders if we could just comment out all of this and just not start the 
 	// Startup decoder
 	std::vector<std::thread> decoderThreads;
 

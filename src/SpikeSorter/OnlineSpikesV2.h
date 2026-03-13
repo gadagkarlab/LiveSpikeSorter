@@ -33,8 +33,8 @@ public:
 	~OnlineSpikesV2();
 	void runSpikeSorting();
 	void runSyllDetectThenSorting(std::vector<int> targetPulseCounts, float delay1_ms, float delay2_ms, float delay3_ms, std::unordered_set<int> targetTemplates,
-		int matchesThreshold);// KS fxn 
-	//void runTriggeredWithContinuousSorting(); // KS fxn  not implemented 
+		int matchesThreshold);// KS- main fxn 
+	//void runTriggeredWithContinuousSorting(); // KS- fxn  not implemented 
 
 private:
 	// for sorting
@@ -67,15 +67,9 @@ private:
 	void saveSpikes(long lNInds, long lStreamSampleCtOffset, long lEndValid, std::vector<long>& Times, std::vector<long>& Templates, std::vector<float>& Amplitudes);
 
 
-	// KS for syllable detecting + sorting + triggering 
+	// KS- for syllable detecting + sorting + triggering 
 	void OnlineSpikesV2::countNidqRisingEdgesInBuffer(const float* fetchBuf, t_ull bufferStartCt, t_ull nFetched, bool& prevHigh, int& edgeCount, std::vector<t_ull>& edgeTimes);
-	//void processTriggeredImecLoop(double windowStart_Ms, double windowEnd_Ms);
-	//void processOneTriggeredChunk(t_ull triggerImecCt, double preMs, double postMs);
 	
-
-	//KS for sending digital trigger 
-	//enum triggerMode { Greater, Lesser };
-	//void sendDigTrigger(std::vector<int> triggerTemplates, std::vector<int> nSpikesThreshold,double wait_Ms);
 
 	// Debug
 	std::string ossOutputDir;
@@ -111,16 +105,19 @@ private:
 	long redundancy; // # of copies of memory to allocate because we don't know number of spikes apriori
 	long timeBehind; // Time (ms) we are allowed to be behind from SGLX; 0: skip batches if behind, >= 100'000: no skip
 	long downsampling; // Factor we are temporally downsampling
-	float samplingRate; 
-	float IMsamplingRate; // IMEC sampling rate (hz)
-	float NIsamplingRate; // KS NI sampling rate Hz 
+	float samplingRate; // KS- this the IMEC samprate that the original fxn uses 
+	float IMsamplingRate; // KS- added IMEC sampling rate (hz)
+	float NIsamplingRate; // KS- added NI sampling rate Hz 
 	int nidqRefreshRate; // NIDQ refresh rate (no idea what units or anything)
 	bool smallSkip;
 
 	// Host pointers
 	long  numSpikes; // number of spikes found
-	std::vector<int> channelMap; // the set of channels this sorter will operate on //KS to modify when running live 
+
+	//KS- add param to subset channels we care about? I can also do some hacky way where I subset the input but may be problematic 
+	std::vector<int> channelMap; // the set of channels this sorter will operate on 
 	std::vector<int> templateMap; // the set of neurons this sorter will operate on
+
 	std::vector<float> xs;
 	std::vector<float> ys;
 	std::vector<long> lastSpikeTime; // size T: will remove duplicate spikes
