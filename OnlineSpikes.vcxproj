@@ -17,7 +17,7 @@
   <PropertyGroup Label="Globals">
     <ProjectGuid>{5BD03465-43CD-41CE-8328-AB8E7A7C8205}</ProjectGuid>
     <RootNamespace>OnlineSpikes</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.19041.0</WindowsTargetPlatformVersion>
     <CudaToolkitCustomDir>$(CUDA_PATH)</CudaToolkitCustomDir>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -97,7 +97,7 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>WIN64;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\Users\kesha\anaconda3\envs\onlinespikes\Lib\site-packages\numpy\core\include;C:\Users\kesha\anaconda3\envs\onlinespikes\include;C:\Users\kesha\OneDrive\Desktop\LiveSpikeSorter\mlpack\armadillo-15.2.3\include;C:\Users\kesha\OneDrive\Desktop\LiveSpikeSorter\mlpack\mlpack-4.7.0\src;C:\Users\kesha\OneDrive\Desktop\LiveSpikeSorter\mlpack\ensmallen-3.11.0\include;C:\Users\kesha\OneDrive\Desktop\LiveSpikeSorter\mlpack\cereal-1.3.2\include;C:\Users\kesha\OneDrive\Desktop\LiveSpikeSorter\External;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\kesha\OneDrive\Desktop\LiveSpikeSorter_KS_31926\External;C:\Users\kesha\OneDrive\Desktop\LiveSpikeSorter_KS_31926\mlpack\cereal-1.3.2\include;C:\Users\kesha\OneDrive\Desktop\LiveSpikeSorter_KS_31926\mlpack\ensmallen-3.11.0\include;C:\Users\kesha\OneDrive\Desktop\LiveSpikeSorter_KS_31926\mlpack\mlpack-4.7.0\src;C:\Users\kesha\OneDrive\Desktop\LiveSpikeSorter_KS_31926\mlpack\armadillo-15.2.3\include;C:\Users\kesha\anaconda3\envs\onlinespikes\include;C:\Users\kesha\anaconda3\envs\onlinespikes\Lib\site-packages\numpy\core\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <ShowIncludes>false</ShowIncludes>
@@ -116,7 +116,7 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
       <GenerateDebugInformation>false</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
       <AdditionalDependencies>cublas.lib;cudnn.lib;ws2_32.lib;npps.lib;d3d12.lib;dxgi.lib;libSglxApi.a;cusolver.lib;cudart.lib;cufft.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\Users\kesha\anaconda3\envs\onlinespikes\libs;C:\Users\kesha\OneDrive\Desktop\LiveSpikeSorter\External\sglx;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\Users\kesha\anaconda3\envs\onlinespikes\libs;C:\Users\kesha\OneDrive\Desktop\LiveSpikeSorter_KS_31926\External\sglx;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <UACExecutionLevel>HighestAvailable</UACExecutionLevel>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -200,7 +200,6 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
     <ClCompile Include="src\Gui\OutputGuiTab.cpp" />
     <ClCompile Include="src\Helpers\GuiHelpers.cpp" />
     <ClCompile Include="src\Networking\FragmentManager.cpp" />
-    <ClCompile Include="src\SpikeGLX-CPP-SDK-main\SpikeGLX-CPP-SDK-main\API\SglxCppClient.cpp" />
     <ClCompile Include="src\SpikeSorter\dataSocket.cpp" />
     <ClCompile Include="src\Decoder\Decoder.cpp" />
     <ClCompile Include="src\Helpers\FileWriter.cpp" />
@@ -247,8 +246,6 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
     <ClInclude Include="src\Gui\OutputGuiTab.h" />
     <ClInclude Include="src\Helpers\GuiHelpers.h" />
     <ClInclude Include="src\Networking\FragmentManager.h" />
-    <ClInclude Include="src\SpikeGLX-CPP-SDK-main\SpikeGLX-CPP-SDK-main\API\SglxApi.h" />
-    <ClInclude Include="src\SpikeGLX-CPP-SDK-main\SpikeGLX-CPP-SDK-main\API\SglxCppClient.h" />
     <ClInclude Include="src\SpikeSorter\dataSocket.h" />
     <ClInclude Include="src\Decoder\Decoder.h" />
     <ClInclude Include="src\Helpers\FileWriter.h" />

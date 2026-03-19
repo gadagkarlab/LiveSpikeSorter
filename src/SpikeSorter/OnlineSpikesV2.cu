@@ -19,6 +19,7 @@
 #include <vector>
 #include <thread>
 #include "../Helpers/Timer.h"
+#include <iostream>
 #include <fstream>
 #include <bitset>
 
@@ -48,6 +49,10 @@
 #include <atomic>
 #include <mutex>
 #include <numeric>
+
+// BRIAN DEBUG WITH RNG
+#include <random>
+//
 
 #ifdef WINDOWS
 #ifndef _WIN_CLOCK
@@ -287,16 +292,16 @@ OnlineSpikesV2::~OnlineSpikesV2()
 	static const char *ptLabel = { "OnlineSpikesV2::~OnlineSpikesV2" };
 
 	// Deallocate Host Memory
-	#define X(type, name, memType, size) \
+#define X(type, name, memType, size) \
 		if (memType == Host) { \
 			delete[] name; \
 			name = nullptr; \
 		}
-		MEMORY_VARIABLES
-	#undef X
+	MEMORY_VARIABLES
+#undef X
 
-	// Deallocate Pinned Host Memory
-	#define X(type, name, memType, size) \
+		// Deallocate Pinned Host Memory
+#define X(type, name, memType, size) \
 		if (memType == Pinned) { \
 			if (name) { \
 				_CUDA_CALL(cudaFreeHost(name)); \
@@ -304,10 +309,10 @@ OnlineSpikesV2::~OnlineSpikesV2()
 			} \
 		}
 		MEMORY_VARIABLES
-	#undef X
+#undef X
 
-	// Deallocate Device Memory
-	#define X(type, name, memType, size) \
+		// Deallocate Device Memory
+#define X(type, name, memType, size) \
 		if (memType == Device) { \
 			if (name) { \
 				_CUDA_CALL(cudaFree(name)); \
@@ -315,10 +320,10 @@ OnlineSpikesV2::~OnlineSpikesV2()
 			} \
 		}
 		MEMORY_VARIABLES
-	#undef X
+#undef X
 
-	// Close files and perform other cleanup
-	spikesFileOut.close();
+		// Close files and perform other cleanup
+		spikesFileOut.close();
 }
 
 void OnlineSpikesV2::initializeSorter(InputParameters params) {
@@ -390,13 +395,13 @@ void OnlineSpikesV2::allocateMemory()
 	int minBufferSize;
 	nppsMaxIndxGetBufferSize_32f(W * T, &minBufferSize);
 
-		// Host memory allocations
+	// Host memory allocations
 #define X(type, name, memType, size) \
         if (memType == Host) { \
             name = new type[size]; \
             std::memset(name, 0, sizeof(type) * size); \
         }
-		MEMORY_VARIABLES
+	MEMORY_VARIABLES
 #undef X
 
 		// Pinned Host memory allocations
@@ -418,8 +423,8 @@ void OnlineSpikesV2::allocateMemory()
 		} 
 		MEMORY_VARIABLES
 #undef X
-										
-	templateMap.resize(T);
+
+		templateMap.resize(T);
 	channelMap.resize(C);
 	lastSpikeTime.resize(T);
 }
@@ -455,10 +460,10 @@ void OnlineSpikesV2::loadKilosortParameters(std::string directoryPath)
 		params[key] = value;
 	}
 
-	nt0min          = std::stoi(params["nt0min"]);
+	nt0min = std::stoi(params["nt0min"]);
 	numNearestChans = std::stoi(params["numNearestChans"]);
-	Th_learned      = std::stoi(params["Th_learned"]);
-	dt              = std::stoi(params["duplicate_spike_bins"]);
+	Th_learned = std::stoi(params["Th_learned"]);
+	dt = std::stoi(params["duplicate_spike_bins"]);
 }
 
 void OnlineSpikesV2::loadPreclusterShapes(std::string filepath)
@@ -554,47 +559,47 @@ void OnlineSpikesV2::loadTemplateMap(std::string filepath)
 
 void OnlineSpikesV2::loadKilosortTrainingData(std::string directoryPath)
 {
-    static const char* ptLabel =
-        "OnlineSpikesV2::loadKilosortIntermediateTensors";
+	static const char* ptLabel =
+		"OnlineSpikesV2::loadKilosortIntermediateTensors";
 
-    std::cout << "Loading Kilosort tensors from " << directoryPath << std::endl;
+	std::cout << "Loading Kilosort tensors from " << directoryPath << std::endl;
 
-    // --- Load .npy files ---
-    auto npctc                   = cnpy::npy_load(directoryPath + "ctc.npy");
-    auto npWall3                 = cnpy::npy_load(directoryPath + "Wall3.npy");
-    auto npDriftMatrix           = cnpy::npy_load(directoryPath + "drift_matrix.npy");
-    auto npiCC                   = cnpy::npy_load(directoryPath + "iCC.npy");
-    auto npiU                    = cnpy::npy_load(directoryPath + "iU.npy");
-    auto npUcc                   = cnpy::npy_load(directoryPath + "Ucc.npy");
-    auto npwPCA                  = cnpy::npy_load(directoryPath + "wPCA.npy");
-    auto npwPCA_permuted         = cnpy::npy_load(directoryPath + "wPCA_permuted.npy");
-    auto nptemplateWaveforms     = cnpy::npy_load(directoryPath + "preclustered_template_waveforms.npy");
-    auto npHpFilter              = cnpy::npy_load(directoryPath + "hp_filter.npy");
-    auto npxc                    = cnpy::npy_load(directoryPath + "xc.npy");
-    auto npyc                    = cnpy::npy_load(directoryPath + "yc.npy");
+	// --- Load .npy files ---
+	auto npctc = cnpy::npy_load(directoryPath + "ctc.npy");
+	auto npWall3 = cnpy::npy_load(directoryPath + "Wall3.npy");
+	auto npDriftMatrix = cnpy::npy_load(directoryPath + "drift_matrix.npy");
+	auto npiCC = cnpy::npy_load(directoryPath + "iCC.npy");
+	auto npiU = cnpy::npy_load(directoryPath + "iU.npy");
+	auto npUcc = cnpy::npy_load(directoryPath + "Ucc.npy");
+	auto npwPCA = cnpy::npy_load(directoryPath + "wPCA.npy");
+	auto npwPCA_permuted = cnpy::npy_load(directoryPath + "wPCA_permuted.npy");
+	auto nptemplateWaveforms = cnpy::npy_load(directoryPath + "preclustered_template_waveforms.npy");
+	auto npHpFilter = cnpy::npy_load(directoryPath + "hp_filter.npy");
+	auto npxc = cnpy::npy_load(directoryPath + "xc.npy");
+	auto npyc = cnpy::npy_load(directoryPath + "yc.npy");
 
-    filterLen = npHpFilter.num_vals;
+	filterLen = npHpFilter.num_vals;
 
-    std::cout << "Copying tensors to device..." << std::endl;
+	std::cout << "Copying tensors to device..." << std::endl;
 
-    // --- Copy to GPU ---
-    _CUDA_CALL(cudaMemcpy(d_ctc,                   npctc.data<float>(),               unclu_T * unclu_T * (2 * M + 1) * sizeof(float), cudaMemcpyHostToDevice));
-    _CUDA_CALL(cudaMemcpy(d_Wall3,                 npWall3.data<float>(),             unclu_T * K * C * sizeof(float),                 cudaMemcpyHostToDevice));
-    _CUDA_CALL(cudaMemcpy(d_driftMatrix,           npDriftMatrix.data<float>(),       C * C * sizeof(float),                           cudaMemcpyHostToDevice));
-    _CUDA_CALL(cudaMemcpy(d_iCC,                   npiCC.data<int64_t>(),             10 * C * sizeof(int64_t),                        cudaMemcpyHostToDevice));
-    _CUDA_CALL(cudaMemcpy(d_iU,                    npiU.data<int64_t>(),              unclu_T * sizeof(int64_t),                       cudaMemcpyHostToDevice));
-    _CUDA_CALL(cudaMemcpy(d_Ucc,                   npUcc.data<float>(),               10 * K * unclu_T * sizeof(float),                cudaMemcpyHostToDevice));
-    _CUDA_CALL(cudaMemcpy(d_wPCA,                  npwPCA.data<float>(),              K * M * sizeof(float),                           cudaMemcpyHostToDevice));
-    _CUDA_CALL(cudaMemcpy(d_wPCA_permuted,         npwPCA_permuted.data<float>(),     K * M * sizeof(float),                           cudaMemcpyHostToDevice));
-    _CUDA_CALL(cudaMemcpy(d_templateWaveforms,     nptemplateWaveforms.data<float>(), unclu_T * M * C * sizeof(float),                 cudaMemcpyHostToDevice));
-    _CUDA_CALL(cudaMemcpy(d_hpFilterFull,          npHpFilter.data<float>(),          filterLen * sizeof(float),                       cudaMemcpyHostToDevice));
-    _CUDA_CALL(cudaMemcpy(d_xc,                    npxc.data<float>(),                C * sizeof(float),                               cudaMemcpyHostToDevice));
-    _CUDA_CALL(cudaMemcpy(d_yc,                    npyc.data<float>(),                C * sizeof(float),                               cudaMemcpyHostToDevice));
+	// --- Copy to GPU ---
+	_CUDA_CALL(cudaMemcpy(d_ctc, npctc.data<float>(), unclu_T * unclu_T * (2 * M + 1) * sizeof(float), cudaMemcpyHostToDevice));
+	_CUDA_CALL(cudaMemcpy(d_Wall3, npWall3.data<float>(), unclu_T * K * C * sizeof(float), cudaMemcpyHostToDevice));
+	_CUDA_CALL(cudaMemcpy(d_driftMatrix, npDriftMatrix.data<float>(), C * C * sizeof(float), cudaMemcpyHostToDevice));
+	_CUDA_CALL(cudaMemcpy(d_iCC, npiCC.data<int64_t>(), 10 * C * sizeof(int64_t), cudaMemcpyHostToDevice));
+	_CUDA_CALL(cudaMemcpy(d_iU, npiU.data<int64_t>(), unclu_T * sizeof(int64_t), cudaMemcpyHostToDevice));
+	_CUDA_CALL(cudaMemcpy(d_Ucc, npUcc.data<float>(), 10 * K * unclu_T * sizeof(float), cudaMemcpyHostToDevice));
+	_CUDA_CALL(cudaMemcpy(d_wPCA, npwPCA.data<float>(), K * M * sizeof(float), cudaMemcpyHostToDevice));
+	_CUDA_CALL(cudaMemcpy(d_wPCA_permuted, npwPCA_permuted.data<float>(), K * M * sizeof(float), cudaMemcpyHostToDevice));
+	_CUDA_CALL(cudaMemcpy(d_templateWaveforms, nptemplateWaveforms.data<float>(), unclu_T * M * C * sizeof(float), cudaMemcpyHostToDevice));
+	_CUDA_CALL(cudaMemcpy(d_hpFilterFull, npHpFilter.data<float>(), filterLen * sizeof(float), cudaMemcpyHostToDevice));
+	_CUDA_CALL(cudaMemcpy(d_xc, npxc.data<float>(), C * sizeof(float), cudaMemcpyHostToDevice));
+	_CUDA_CALL(cudaMemcpy(d_yc, npyc.data<float>(), C * sizeof(float), cudaMemcpyHostToDevice));
 
-    _CUDA_CALL(cudaDeviceSynchronize());
+	_CUDA_CALL(cudaDeviceSynchronize());
 
-    // --- Precompute norms (nm) ---
-    for (int t = 0; t < unclu_T; ++t) {
+	// --- Precompute norms (nm) ---
+	for (int t = 0; t < unclu_T; ++t) {
 		_CUBLAS_CALL(cublasSdot(
 			cublasHandle,
 			K * C,
@@ -602,12 +607,12 @@ void OnlineSpikesV2::loadKilosortTrainingData(std::string directoryPath)
 			d_Wall3 + t * K * C, 1,
 			d_nm + t
 		), "Error pre-computing template norms");
-        _CUDA_CALL(cudaDeviceSynchronize());
-    }
+		_CUDA_CALL(cudaDeviceSynchronize());
+	}
 
-    // --- Precompute reciprocal of nm ---
+	// --- Precompute reciprocal of nm ---
 	reciprocal(d_nm, unclu_T);
-    _CUDA_CALL(cudaDeviceSynchronize());
+	_CUDA_CALL(cudaDeviceSynchronize());
 }
 
 // TODO: Get rid of function since we no longer use clusterMap
@@ -616,15 +621,15 @@ void OnlineSpikesV2::loadKilosortClusteringData(std::string directoryPath)
 	static const char *ptLabel = { "OnlineSpikesV2::loadKilosortClusteringData" };
 
 	// --- Load data from Kilosort
-	cnpy::NpyArray npSpikeTemplates				= cnpy::npy_load(directoryPath + "spike_templates.npy");
-	cnpy::NpyArray npSpikeDetectionTemplates	= cnpy::npy_load(directoryPath + "spike_detection_templates.npy");
-	cnpy::NpyArray npClusterCenters				= cnpy::npy_load(directoryPath + "cluster_centroids.npy");
+	cnpy::NpyArray npSpikeTemplates = cnpy::npy_load(directoryPath + "spike_templates.npy");
+	cnpy::NpyArray npSpikeDetectionTemplates = cnpy::npy_load(directoryPath + "spike_detection_templates.npy");
+	cnpy::NpyArray npClusterCenters = cnpy::npy_load(directoryPath + "cluster_centroids.npy");
 
-	long numSpikes						= npSpikeTemplates.shape[0];
-	long* spikeTemplates				= npSpikeTemplates.data<long>();
-	long* spikeDetectionTemplates		= npSpikeDetectionTemplates.data<long>();
-	float* clusterCenters				= npClusterCenters.data<float>();
-	
+	long numSpikes = npSpikeTemplates.shape[0];
+	long* spikeTemplates = npSpikeTemplates.data<long>();
+	long* spikeDetectionTemplates = npSpikeDetectionTemplates.data<long>();
+	float* clusterCenters = npClusterCenters.data<float>();
+
 	// cluster centers are provided as [ x_1, y_1, x_2, y_2, ... ]
 	for (int i = 0; i < npClusterCenters.num_vals; i++) {
 		if (i & 1) ys.push_back(clusterCenters[i]);
@@ -633,45 +638,67 @@ void OnlineSpikesV2::loadKilosortClusteringData(std::string directoryPath)
 }
 
 //KS-fxn i feel like this shouldnt be calling edgeTimes.clear() every time in the case that my pulses span multiple buffers?
-void OnlineSpikesV2::countNidqRisingEdgesInBuffer(const float* fetchBuf,t_ull processedCt,t_ull nFetched,bool& prevHigh,int& edgeCount,std::vector<t_ull>& edgeTimes)
+void OnlineSpikesV2::countNidqRisingEdgesInBuffer(const float* fetchBuf, t_ull processedCt, t_ull nFetched, bool& prevHigh, int& edgeCount, std::vector<t_ull>& edgeTimes)
 {
+	///////// BRIAN DEBUG RNG
+	//std::random_device dev;
+	//std::mt19937 rng(dev());
+	//std::uniform_int_distribution<std::mt19937::result_type> dist4(0, 3); // distribution in range [0, 3]
+	//nFetched = (t_ull)dist4(rng);
+	/////////////////////////
+	
 	edgeCount = 0;
 	edgeTimes.clear();
 
 	for (t_ull i = 0; i < nFetched; ++i) {
-		bool high = (fetchBuf[i] != 0.5f);   
+		bool high = (fetchBuf[i] >= 0.5f);
 
 		if (!prevHigh && high) {
 			++edgeCount;
 			edgeTimes.push_back(processedCt + i);
 		}
-
 		prevHigh = high;
 	}
 }
 
-//KS-mainfxn 
-void OnlineSpikesV2::runSyllDetectThenSorting(std::vector<int> targetPulseCounts, float delay1_ms, float delay2_ms, float delay3_ms, std::unordered_set<int> targetTemplates, int matchesThreshold) {
-	
+//KS-mainfxn, BRIAN edited
+void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
+	//std::vector<int> targetPulseCounts, float delay1_ms, float delay2_ms, float delay3_ms, std::unordered_set<int> targetTemplates, int matchesThreshold) {
+	std::vector<int> targetPulseCounts = params.vSylNum;
+	float delay1_ms = params.fDelay1;
+	float delay2_ms = params.fDelay2;
+	float delay3_ms = params.fDelay3;
+	std::unordered_set<int> targetTemplates = params.usTemplateIdx;
+	int matchesThreshold = params.iThresh;
+
 	static const char *ptLabel = { "OnlineSpikesV2::runSyllDetectThenSorting" };
-	
-	long 	processedCt, // Most recent stream sample count that has been processed
-		allowedCt, // Samples we are behind
+
+	long 	 allowedCt, // Samples we are behind
 		skipCounter = 0, // Number of times we skipped
 		currBatchNumSamples; // Number of samples in current batch
 
-	bool prevHigh= false;
+	bool prevHigh = false;
 	int edgeCount = 0;
-	std::vector<t_ull> edgeTimes; 
+	std::vector<t_ull> edgeTimes
+		;
 	std::deque<t_ull> recentEdges;
-	t_ull pulseWindowSamples = static_cast<t_ull>(0.003 * NIsamplingRate);  //KS- 3 ms window to check for pulses, placeholder val realistically i think itll be 1ms
+	float NIsamplingRate = 39999.8;
+	float IMsamplingRate = 29999.8;
 
-	t_ull syllImCt,
+	t_ull pulseWindowSamples = static_cast<t_ull>(params.fPulseWindow * NIsamplingRate);  //KS- 3 ms window to check for pulses, placeholder val realistically i think itll be 1ms
+
+	t_ull NI_processedCT,
+		NI_nFetched,
+		IM_processedCT,
+		NI_latestCt,
+		IM_latestCt,
+		syllImCt,
 		targStartCt,
 		targEndCt,
 		FeedbackCt;
 
-	int templateMatches=0;
+	int templateMatches = 0;
+	int pulsesInWindow = 0;
 
 	float	p2p; // peak-to-peak data to be sent to decoder
 	std::vector<float> p2ps(C, 0); // per-channel peak-to-peak data to be sent to decoder
@@ -681,6 +708,9 @@ void OnlineSpikesV2::runSyllDetectThenSorting(std::vector<int> targetPulseCounts
 
 	// timespec's to keep track of processing time to be sent to the Decoder
 	struct timespec batchBefore, batchAfter;
+
+	// file to write syllable/spike log to
+	std::ofstream syllLogFile("syll_log.txt");
 
 	// Vectors to store the spike times, templates, and amplitudes to be sent to the Decoder
 	std::vector<long> times;
@@ -697,65 +727,58 @@ void OnlineSpikesV2::runSyllDetectThenSorting(std::vector<int> targetPulseCounts
 
 	// open NI Stream 
 	sglxSock->initNidqStream();
-	latestCt = sglxSock->getStreamSampleCt(NIDQ, osParams);
-	processedCt = latestCt;
+	NI_latestCt = sglxSock->getStreamSampleCt(NIDQ, osParams);
+	NI_processedCT = NI_latestCt;
+
+	std::cout << "starting fetching!" << std::endl;
+
 	while (true) {
 		//assuming i never fall behind the NIstream 
-		latestCt = sglxSock->getStreamSampleCt(NIDQ, osParams);
-		allowedCt = latestCt - timeBehind * NIsamplingRate / 1000;
 
+		NI_latestCt = sglxSock->fetchNidqLatest(NI_buff, osParams, NI_processedCT);
 
-		latestCt = sglxSock->fetchNidqLatest(fetchBuf, osParams, processedCt);
+		NI_nFetched = NI_latestCt - NI_processedCT;
+		//std::cout << "num NI Fetched = " << NI_nFetched << std::endl; 
 
-		t_ull nFetched = latestCt - processedCt;
+		countNidqRisingEdgesInBuffer(NI_buff, NI_processedCT, NI_nFetched, prevHigh, edgeCount, edgeTimes);//KS- this buffer is the only digital bit i care about
+		
+		pulsesInWindow = edgeTimes.size();
+		//for (t_ull edget : edgeTimes) {
+		//	recentEdges.push_back(edget);
+		//	while (!recentEdges.empty() &&
+		//		edget - recentEdges.front() > pulseWindowSamples) { //ks- feels like this is not robust? 
+		//		recentEdges.pop_front();
+		//	}
+		//	pulsesInWindow = recentEdges.size();
+		//}
+		
+		//pulses in window = syllable ID 
+		//std::cout << "syll # =  " << pulsesInWindow << std::endl;
+		if (std::find(targetPulseCounts.begin(),
+			targetPulseCounts.end(),
+			pulsesInWindow) != targetPulseCounts.end()) 
+			{
 
-		countNidqRisingEdgesInBuffer(fetchBuf, processedCt, nFetched, prevHigh, edgeCount, edgeTimes);//KS- this buffer is the only digital bit i care about
-
-		processedCt = latestCt;
-
-		for (t_ull edgeT : edgeTimes) {
-			recentEdges.push_back(edgeT);
-
-			while (!recentEdges.empty() &&
-				edgeT - recentEdges.front() > pulseWindowSamples) { //KS- feels like this is not robust? 
-				recentEdges.pop_front();
-			}
-
-			int pulsesInWindow = recentEdges.size();
-			
-
-			if (std::find(targetPulseCounts.begin(),
-				targetPulseCounts.end(),
-				pulsesInWindow) == targetPulseCounts.end()) {
-				continue;
-			}
-			//im now in a syllable i want to get ready for sorting !
-			syllImCt = sglxSock->getStreamSampleCt(IMEC, osParams); // get imec sample index as soon as i detect a syllable
+			std::cout << "syl # in loop =  " << pulsesInWindow << std::endl;
+			syllImCt = sglxSock->getStreamSampleCt(IMEC,osParams);// now in a syllable i want to get ready for sorting 
 			targStartCt = syllImCt + (delay1_ms * IMsamplingRate / 1000) - 40;// sample indices i want to sort 
-			targEndCt = syllImCt + (delay2_ms * IMsamplingRate / 1000) + 40;
+			targEndCt = syllImCt + (delay2_ms * IMsamplingRate / 1000) + 40;			
 			FeedbackCt = syllImCt + (delay3_ms * IMsamplingRate / 1000);
-
 			sglxSock->waitUntil(targEndCt + 40, osParams); // rough wait until samples should b ready, is there any better way to do it? 
-			currBatchNumSamples = targEndCt - targStartCt;
-
-
-			times.clear();
-			templates.clear();
-			amplitudes.clear();
-
-			sglxSock->fetchImecExact(fetchBuf + currBatchNumSamples * C, osParams, targStartCt, targEndCt);
-
-			//KS-everything below is copied from the original spike sorting function
+			
+			clock_gettime(batchBefore);
+			//IM_latestCt = sglxSock->fetchLatest(fetchBuf, osParams, targStartCt);
+			IM_latestCt = sglxSock->fetchImecExact(fetchBuf, osParams, targStartCt, targEndCt);
+			currBatchNumSamples = IM_latestCt- targStartCt; 
+			//std::cout << 
+			//for (size_t i = 0; i < 100; ++i) {
+			//	std::cout << fetchBuf[i] << " ";
+			//}
 			{
 				Timer timer("cpu to gpu");
-				/*
-				The data received from SpikeGLX in d_fetchBuf is currently arranged such that SAMPLES are contiguous, i.e.
-				d_fetchBuf[t + chan * currBatchNumSamples] corresponds to sample t, channel chan
-			*/
-
-				if (skip) {
+				if (skip) {	
 					// Skip the last minScanWindow of previous batch (the first m_lMinWindow * m_lC bits)
-					_CUDA_CALL(cudaMemcpy(d_fetchBuf, fetchBuf + currBatchNumSamples * C, C * currBatchNumSamples * sizeof(float), cudaMemcpyHostToDevice));
+					_CUDA_CALL(cudaMemcpy(d_fetchBuf, fetchBuf + minWindow * C, C * currBatchNumSamples * sizeof(float), cudaMemcpyHostToDevice));
 
 					// Increment skip counter
 					skipCounter++;
@@ -786,7 +809,7 @@ void OnlineSpikesV2::runSyllDetectThenSorting(std::vector<int> targetPulseCounts
 			{
 				Timer timer("highpassFilter()");
 				transpose(d_fetchBuf, d_fetchBuf2, currBatchNumSamples, C);
-				highpassFilter(d_fetchBuf2, C, currBatchNumSamples, IMsamplingRate, 300);
+				highpassFilter(d_fetchBuf2, C, currBatchNumSamples, 30000, 300);
 			}
 			_CUDA_CALL(cudaDeviceSynchronize());
 			// Whiten the batch on device (THIS WORKS FOR SURE, DO NOT TOUCH OR WORRY ABOUT IT)
@@ -803,6 +826,8 @@ void OnlineSpikesV2::runSyllDetectThenSorting(std::vector<int> targetPulseCounts
 			_CUDA_CALL(cudaDeviceSynchronize());
 			// Perform OMP
 			numSpikes = kilosortMatchingPursuit(d_fetchBuf2, currBatchNumSamples);
+			std::cout << "currBatch Samples= " << currBatchNumSamples << " and had numSpikes= " << numSpikes << std::endl;
+
 			// Use results of OMP to assign unmapped spike templates to the closest clusters
 			// - inputs: d_spikeTemplates, d_spikeTimes, d_residual
 			// - outputs: closest_x, closest_y
@@ -812,45 +837,86 @@ void OnlineSpikesV2::runSyllDetectThenSorting(std::vector<int> targetPulseCounts
 			}
 
 			// Save the spikes into times, templates, amplitudes
-			saveSpikes(numSpikes, targEndCt - currBatchNumSamples + 1, currBatchNumSamples - minWindow, times, templates, amplitudes);
+			int kms = templates.size();
+			std::cout << "pre saveSpikes templates.size()= " <<  kms << std::endl;
+			std::cout<< "and numSpikes = " << numSpikes << std::endl;
+			saveSpikes(numSpikes, targStartCt, IM_latestCt, times, templates, amplitudes);
+			
+			int ntemps = templates.size();
+			std::cout << "post saveSpikes templates.size()= " << ntemps << std::endl;
 
+			//Timer timer("cpu to gpu");
 			int templateMatches = 0;
 			for (int templ : templates) {
 				if (targetTemplates.count(templ)) {
 					++templateMatches;
 				}
 			}
-			std::cout << "template matches = " << templateMatches
-				<< " after NI edge sample " << edgeT
-				<< " IM window [" << targStartCt
-				<< ", " << targEndCt << "]" << std::endl;
+			clock_gettime(batchAfter);
+			long processTime = GetTimeDiff(batchAfter, batchBefore);
+
+			// BRIAN write to syllable log file 
+			syllLogFile << "Syllable index = " << pulsesInWindow << ", template matches = " << templateMatches << " out of total templates= " << ntemps
+				<< ", after NI edge sample " << edgeTimes[0]
+				<< ", IM window [" << targStartCt
+				<< ", " << targEndCt << "]" 
+				<< "processesing time = "<< processTime << std::endl;
 			//does this loop break do what i think its doiung??? 
-			if (templateMatches >= matchesThreshold) {
-				while (sglxSock->getStreamSampleCt(IMEC, osParams) < FeedbackCt) {
+
+			bool shouldFeedback = params.bThreshMode
+				? (templateMatches >= matchesThreshold)
+				: (templateMatches < matchesThreshold);
+
+			if (shouldFeedback){
+				while (sglxSock->getStreamSampleCt(IMEC,osParams) < FeedbackCt) {
+					std::cout << "waiting for feedback" << std::endl;
 					//keep getting sample count until i pass feedback time 
 				}
 				//now we've passed the required feedback time
 				sglxSock->setDigitalOut(0);//fxn autosets line hi->lo
+				NI_processedCT = NI_latestCt;// sglxSock->getStreamSampleCt(NIDQ, osParams);
+				OnlineSpikesPayload payload = { recordingOffset,
+								IM_latestCt,
+								times,
+								templates,
+								amplitudes,
+								rootMeanSquared,
+								p2p,
+								processTime
+				};
+
+				sendPayload(&imecFm, payload, decoderImecAddr);
+
 				recentEdges.clear();
-				processedCt = sglxSock->getStreamSampleCt(NIDQ, osParams);
+				
 			}
-			//failed template 
-			recentEdges.clear();
-			processedCt = sglxSock->getStreamSampleCt(NIDQ, osParams);
-			break;
+			else {
+				//failed template 
+				recentEdges.clear();
+				NI_processedCT = NI_latestCt;//sglxSock->getStreamSampleCt(NIDQ, osParams);
+				// Debug
+			}
+		//writeSpikesToFile_syllable(times, templates, amplitudes, syllLogFile);
+		times.clear();
+		templates.clear();
+		amplitudes.clear();
+
+		}
+		else {
+		NI_processedCT = NI_latestCt;//sglxSock->getStreamSampleCt(NIDQ, osParams); // BRIAN CHANGED
 		}
 	}
 
 }
 
-void OnlineSpikesV2::runSpikeSorting()
+void OnlineSpikesV2::runSpikeSorting()	
 {
 	static const char *ptLabel = { "OnlineSpikesV2::runSpikeSorting" };
-	
+
 	long 	processedCt, // Most recent stream sample count that has been processed
-			allowedCt, // Samples we are behind
-			skipCounter = 0, // Number of times we skipped
-			currBatchNumSamples; // Number of samples in current batch
+		allowedCt, // Samples we are behind
+		skipCounter = 0, // Number of times we skipped
+		currBatchNumSamples; // Number of samples in current batch
 
 	float	p2p; // peak-to-peak data to be sent to decoder
 	std::vector<float> p2ps(C, 0); // per-channel peak-to-peak data to be sent to decoder
@@ -882,7 +948,7 @@ void OnlineSpikesV2::runSpikeSorting()
 	while (true) {
 		// Wait until the minimum time window has passed before processing
 		sglxSock->waitUntil(latestCt + minWindow, osParams);
-		
+
 		// Time for tracking processing time in OutputGUI
 		clock_gettime(batchBefore);
 
@@ -898,7 +964,7 @@ void OnlineSpikesV2::runSpikeSorting()
 			   m_lMaxWindow despite the conditional, thus the need for the min */
 			currBatchNumSamples = min((latestCt - processedCt) * (latestCt - processedCt >= 0), maxWindow) + minWindow;
 			skip = false;
-		} 
+		}
 
 		// We're behind, but being behind is not tolerated (m_lTimeBehind == 0) so skip enough data to fetch most recent m_lMaxWindow batch
 		else if (timeBehind == 0) {
@@ -906,28 +972,31 @@ void OnlineSpikesV2::runSpikeSorting()
 			currBatchNumSamples = maxWindow;
 			skip = true;
 		}
-		
+
 		// We are behind, but we think we can catch up, thus take from the place we are at now	
 		else if (processedCt >= allowedCt) { // We are too behind, 2 options, small or big skip. 
 			latestCt = sglxSock->fetchFromPlace(fetchBuf + minWindow * C, osParams, processedCt);
 			currBatchNumSamples = maxWindow + minWindow;
 			skip = false;
-		} 
+		}
 
 		// Smallskip: we fetch from the sample count we are allowed to be
 		else if (smallSkip) {
 			latestCt = sglxSock->fetchFromPlace(fetchBuf + minWindow * C, osParams, allowedCt);
 			currBatchNumSamples = maxWindow;
 			skip = true;
-		} 
-		
+		}
+
 		// Bigskip: we fetch the most recent m_lMaxWindow batch.
 		else {  // m_bSmallskip == false 
 			latestCt = sglxSock->fetchLatest(fetchBuf + minWindow * C, osParams, processedCt);
 			currBatchNumSamples = maxWindow;
 			skip = true;
 		}
-
+		for (size_t i = 0; i < 100; ++i) {
+			std::cout << fetchBuf[i] << " ";
+		}
+		std::cout << std::endl;
 		// Copy Data from cpu --> gpu
 		{
 			Timer timer("cpu to gpu");
@@ -944,8 +1013,8 @@ void OnlineSpikesV2::runSpikeSorting()
 			_CUDA_CALL(cudaDeviceSynchronize());
 		}
 
-		/* 
-			The data received from SpikeGLX in d_fetchBuf is currently arranged such that SAMPLES are contiguous, i.e. 
+		/*
+			The data received from SpikeGLX in d_fetchBuf is currently arranged such that SAMPLES are contiguous, i.e.
 			d_fetchBuf[t + chan * currBatchNumSamples] corresponds to sample t, channel chan
 		*/
 
@@ -990,7 +1059,7 @@ void OnlineSpikesV2::runSpikeSorting()
 			matMul(cublasHandle, d_driftMatrix, d_fetchBuf, d_fetchBuf2, C, C, currBatchNumSamples);
 		}
 		_CUDA_CALL(cudaDeviceSynchronize());
-		
+
 		// Perform OMP
 		numSpikes = kilosortMatchingPursuit(d_fetchBuf2, currBatchNumSamples);
 
@@ -1007,16 +1076,16 @@ void OnlineSpikesV2::runSpikeSorting()
 
 		clock_gettime(batchAfter);
 		long processTime = GetTimeDiff(batchAfter, batchBefore);
-
+		std::cout << "Their pro time is " << processTime << std::endl;
 		// Send relevant data to decoder
-		OnlineSpikesPayload payload = { recordingOffset, 
+		OnlineSpikesPayload payload = { recordingOffset,
 								latestCt,
 								times,
 								templates,
 								amplitudes,
 								rootMeanSquared,
 								p2p,
-								processTime 
+								processTime
 		};
 
 		sendPayload(&imecFm, payload, decoderImecAddr);
@@ -1041,23 +1110,23 @@ void OnlineSpikesV2::computeClosestClusters(long currBatchNumSamples, long numSp
 	_CUDA_CALL(cudaMemcpy(d_spikeTemplates, spikeTemplates, numSpikes * sizeof(long), cudaMemcpyHostToDevice));
 	_CUDA_CALL(cudaMemcpy(d_spikeTimes, spikeTimes, numSpikes * sizeof(long), cudaMemcpyHostToDevice));
 	_CUDA_CALL(cudaDeviceSynchronize());
-	
+
 	dim3 gridDim((numNearestChans + blockDim.x - 1) / blockDim.x,
 		(numSpikes + blockDim.y - 1) / blockDim.y);
 
-	compute_xfeat_kernel <<<gridDim, blockDim >>> (
+	compute_xfeat_kernel << <gridDim, blockDim >> > (
 		numSpikes, numNearestChans, M, K, unclu_T, C,
 		d_iCC, d_iU, d_Ucc, d_residual, currBatchNumSamples,
 		d_wPCA_permuted, d_spikeTimes, d_spikeTemplates, d_amps,
 		d_xfeat
-	);
+		);
 
 	int blocksPerGrid = (numSpikes * K * numNearestChans + DEFAULT_TPB - 1) / DEFAULT_TPB;
-	transpose_xfeat <<<blocksPerGrid, DEFAULT_TPB >>> (d_xfeat, d_tF, numNearestChans, numSpikes, K);
+	transpose_xfeat << <blocksPerGrid, DEFAULT_TPB >> > (d_xfeat, d_tF, numNearestChans, numSpikes, K);
 	_CUDA_CALL(cudaDeviceSynchronize());
 
 	blocksPerGrid = (numSpikes + DEFAULT_TPB - 1) / DEFAULT_TPB;
-	compute_spike_positions_kernel <<<blocksPerGrid, DEFAULT_TPB >>> (
+	compute_spike_positions_kernel << <blocksPerGrid, DEFAULT_TPB >> > (
 		numSpikes,
 		numNearestChans,
 		K,
@@ -1071,7 +1140,7 @@ void OnlineSpikesV2::computeClosestClusters(long currBatchNumSamples, long numSp
 		d_ys,                  // output: spike y positions [numSpikes]
 		unclu_T,
 		C
-	);
+		);
 
 	_CUDA_CALL(cudaMemcpy(closest_x, d_xs, numSpikes * sizeof(float), cudaMemcpyDeviceToHost));
 	_CUDA_CALL(cudaMemcpy(closest_y, d_ys, numSpikes * sizeof(float), cudaMemcpyDeviceToHost));
@@ -1137,7 +1206,7 @@ long OnlineSpikesV2::kilosortMatchingPursuit(float* d_batch, long currBatchNumSa
 			Timer timer("Finding matching indices");
 			findMatchingIndices(d_Cfmaxpool, d_convNormalized, isSpikeThreshold, unclu_T, currBatchNumSamples, M, d_spikeIndices, d_count);
 		}
-	
+
 		// No spikes detected this iteration, meaning no more spikes in rest of batch
 		if (d_spikeIndices.size() == 0) break;
 
@@ -1160,10 +1229,10 @@ long OnlineSpikesV2::kilosortMatchingPursuit(float* d_batch, long currBatchNumSa
 			Timer timer("Compute Amplitudes");
 			_CUDA_CALL(cudaMemset(d_amps, 0, unclu_T * currBatchNumSamples * sizeof(float)));
 			auto blocksPerGrid = (d_spikeIndices.size() + DEFAULT_TPB - 1) / DEFAULT_TPB;
-			compute_amps_kernel <<<blocksPerGrid, DEFAULT_TPB>>> (d_convResult, d_nm, thrust::raw_pointer_cast(d_spikeIndices.data()), d_amps, d_spikeIndices.size(), unclu_T, currBatchNumSamples);
+			compute_amps_kernel << <blocksPerGrid, DEFAULT_TPB >> > (d_convResult, d_nm, thrust::raw_pointer_cast(d_spikeIndices.data()), d_amps, d_spikeIndices.size(), unclu_T, currBatchNumSamples);
 			_CUDA_CALL(cudaDeviceSynchronize());
 		}
-	
+
 		_CUDA_CALL(cudaMemcpy(spikeAmplitudes + numSpikes - d_spikeIndices.size(), d_amps, d_spikeIndices.size() * sizeof(float), cudaMemcpyDeviceToHost));
 		_CUDA_CALL(cudaDeviceSynchronize());
 
@@ -1209,7 +1278,7 @@ void OnlineSpikesV2::highpassFilter(float* d_batch, int C, int currBatchNumSampl
 	float_to_cufftComplex(d_hpFilterSub, d_hpworkspace2, currBatchNumSamples);
 
 	// Perform FFT for filter + batch
-	cufftExecC2C(batchPlanForward,  d_hpworkspace,  d_batchFreq,    CUFFT_FORWARD);
+	cufftExecC2C(batchPlanForward, d_hpworkspace, d_batchFreq, CUFFT_FORWARD);
 	cufftExecC2C(filterPlanForward, d_hpworkspace2, d_hpFilterFreq, CUFFT_FORWARD);
 
 	// Apply filter
@@ -1269,7 +1338,7 @@ void OnlineSpikesV2::findMaxAbs(float *input, long length, int *ind, float *val)
 	// Allocate temporary buffer for absolute values
 	float *d_absBuf;
 	_CUDA_CALL(cudaMalloc((void**)&d_absBuf, length * sizeof(float)));
-	
+
 	// Compute absolute values
 	_NPP_CALL(nppsAbs_32f(input, d_absBuf, length), "Error in computing absolute values.");
 
@@ -1327,7 +1396,16 @@ void OnlineSpikesV2::writeSpikesToFile(std::vector<long> times, std::vector<long
 	static const char *ptLabel = { "OnlineSpikesV2::writeSpikesToFile" };
 
 	for (int i = 0; i < times.size() && i < templates.size(); i++) {
-		spikesFileOut << recordingOffset + times[i] << "," << templates[i] 
+		spikesFileOut << recordingOffset + times[i] << "," << templates[i]
+			<< "," << amplitudes[i] << "," << closest_y[i] << std::endl;
+	}
+}
+
+void OnlineSpikesV2::writeSpikesToFile_syllable(std::vector<long> times, std::vector<long> templates, std::vector<float> amplitudes, std::ofstream& sylLogFile) {
+	static const char *ptLabel = { "OnlineSpikesV2::writeSpikesToFile_syllable" };
+
+	for (int i = 0; i < times.size() && i < templates.size(); i++) {
+		sylLogFile << recordingOffset + times[i] << "," << templates[i]
 			<< "," << amplitudes[i] << "," << closest_y[i] << std::endl;
 	}
 }
@@ -1339,9 +1417,9 @@ typename std::vector<T>::iterator insert_sorted(std::vector<T> &vec, T const& it
 
 void OnlineSpikesV2::saveSpikes(
 	long numSpikes,
-	long startSampleOffset, long endSampleOffset, 
+	long startSampleOffset, long endSampleOffset,
 	std::vector<long>& times, std::vector<long>& templates, std::vector<float>& amplitudes
-) 
+)
 {
 	static const char *ptLabel = { "OnlineSpikes::saveSpikes" }; _UNUSED(*ptLabel);
 	long  sampleInd;
@@ -1351,7 +1429,7 @@ void OnlineSpikesV2::saveSpikes(
 	//Loop over found spikes
 	for (long i = 0; i < numSpikes; i++) {
 		sampleInd = spikeTimes[i] - M / 2 - M + nt0min; // just copying kilosort here
-		amplitude = spikeAmplitudes[i];	
+		amplitude = spikeAmplitudes[i];
 		templateInd = closestCluster(closest_x[i], closest_y[i]);
 
 		// if template is spiking too soon, skip

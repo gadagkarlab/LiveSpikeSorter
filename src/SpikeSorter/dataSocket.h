@@ -32,7 +32,7 @@ public:
 	virtual t_ull   fetchFromPlace(float *fData, OSSSpecificParams osParams, t_ull lStartCt) = 0;
 	virtual t_ull	fetchImecExact(float *fData, OSSSpecificParams osParams, t_ull lStartCt, t_ull lEndCt) = 0; //KS
 
-	virtual t_ull   fetchNidqLatest(float *fData, OSSSpecificParams osParams, t_ull lStartCt = ULLONG_MAX, int m_nMaxSize = 1500, int m_nMinSize = 20) = 0; //KS hard coding these in here asking 0.5 ms @ 40kHz
+	virtual t_ull   fetchNidqLatest(float *fData_NI, OSSSpecificParams osParams, t_ull lStartCt = ULLONG_MAX, int m_nMaxSize = 1500, int m_nMinSize = 20) = 0; //KS hard coding these in here asking 0.5 ms @ 40kHz
 	virtual t_ull	initNidqStream() = 0;
 	virtual t_ull	fetchEventInfo(int &eventLabel, t_ull lStartCt, OSSSpecificParams osParams) = 0;
 	virtual void	setDigitalOut(int signal = 0) {};
@@ -56,10 +56,10 @@ protected:
 
 
 	long		//m_lNChans, // Number of channels in Imec Probe
-				m_lDownsampling; // Downsampling not implemented for FileDataSocket and probably not functional in StreamDataSocket
+		m_lDownsampling; // Downsampling not implemented for FileDataSocket and probably not functional in StreamDataSocket
 
 	float		m_fImecSampRate,
-				m_fNidqSampRate;
+		m_fNidqSampRate;
 };
 
 
@@ -74,7 +74,7 @@ public:
 	t_ull   getStreamSampleCt(int streamType, OSSSpecificParams osParams);
 	t_ull   fetchLatest(float *fData, OSSSpecificParams osParams, t_ull lStartCt = ULLONG_MAX);
 	t_ull	fetchLatest_TC(float *fData, OSSSpecificParams osParams, t_ull lStartCt = ULLONG_MAX);
-	t_ull   fetchFromPlace(float *fData, OSSSpecificParams osParams, t_ull lStartCt); 
+	t_ull   fetchFromPlace(float *fData, OSSSpecificParams osParams, t_ull lStartCt);
 	t_ull	fetchImecExact(float *fData, OSSSpecificParams osParams, t_ull lStartCt, t_ull lEndCt); // KS fxn
 	t_ull   fetchNidqLatest(float *fData, OSSSpecificParams osParams, t_ull lStartCt = ULLONG_MAX, int m_nMaxSize = 1500, int m_nMinSize = 40);// KS fxn
 	t_ull	initNidqStream();
@@ -106,7 +106,7 @@ protected:
 	int m_iSubstream;
 
 	std::vector<int>	//m_vImecChannels,
-						m_vNidqChannels;
+		m_vNidqChannels;
 
 	// Mutex needed in streamDataSocket because streamDataSocket's Imec and Nidq streams cpp api calls could conflict
 	std::mutex	m_mSGlxMutex;

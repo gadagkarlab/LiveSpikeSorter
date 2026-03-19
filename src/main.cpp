@@ -44,8 +44,14 @@ void exeFolderSetup() {
 void runOSSParallel(sockaddr_in mainAddr, InputParameters params, DataSocket* sharedSocket) {
 	try {
 		OnlineSpikesV2 oSpikeSorter(params, mainAddr, sharedSocket);
-		//oSpikeSorter.runSpikeSorting();
-		oSpikeSorter.runSyllDetectThenSorting({ 1 }, 5.0, 15.0, 20.0, {1,2,3,10,12 }, 2);
+		// BRIAN added FB mode check
+		if (params.bFeedbackMode) {
+			oSpikeSorter.runSyllDetectThenSorting(params);
+		}
+		else {
+
+			oSpikeSorter.runSpikeSorting();
+		}
 	}
 	catch (const std::exception& e) {
 		std::cerr << "Exception caught: " << e.what() << std::endl;
@@ -58,7 +64,7 @@ void runSorter(sockaddr_in mainAddr, InputParameters params, DataSocket** &mNC) 
 	if (params.iSorterType == 0) {
 		int nGPUsDetected;
 		cudaGetDeviceCount(&nGPUsDetected);
-		
+
 		if (nGPUsDetected == 0) {
 			throw std::runtime_error("No GPUs detected, cannot run OnlineSpikeSorter\n");
 		}
@@ -68,13 +74,13 @@ void runSorter(sockaddr_in mainAddr, InputParameters params, DataSocket** &mNC) 
 			params.vSelectedDevices.push_back(0);
 		}
 
-		DataSocket* sharedSocket = new StreamDataSocket(params.sDataAccquisitionHost, 
-			params.uDataAccquisitionPort, 
-			params.iSubstream, 
-			params.iMaxScanWindow, 
-			params.iMinScanWindow, 
-			params.fImecSamplingRate, 
-			params.fNidqSamplingRate, 
+		DataSocket* sharedSocket = new StreamDataSocket(params.sDataAccquisitionHost,
+			params.uDataAccquisitionPort,
+			params.iSubstream,
+			params.iMaxScanWindow,
+			params.iMinScanWindow,
+			params.fImecSamplingRate,
+			params.fNidqSamplingRate,
 			params.iDownsampling
 		);
 
@@ -98,7 +104,7 @@ void runSorter(sockaddr_in mainAddr, InputParameters params, DataSocket** &mNC) 
 	else {
 		std::cout << "Sorter type " << params.iSorterType << " not supported." << std::endl;
 	}
-	
+
 	// TODO Exit protocol
 }
 
@@ -136,7 +142,7 @@ InputParameters parseCmdArgs(int argc, char* argv[]) {
 			}
 
 			if (numSorters < std::stoi(argv[i + 1]))
-				std::cout << "WARNING: Requested " << argv[i + 1] << " GPUs/sorters, however, only " << nGPUsDetected 
+				std::cout << "WARNING: Requested " << argv[i + 1] << " GPUs/sorters, however, only " << nGPUsDetected
 				<< " GPUs detected on machine. Proceeding with only the first " << nGPUsDetected << " sorters passed in for arguments." << std::endl;
 		}
 		else if (arg == "--sdm_ip") {
@@ -144,7 +150,7 @@ InputParameters parseCmdArgs(int argc, char* argv[]) {
 				std::cout << "Must supply IP address after --sdm_ip" << std::endl;
 				exit(EXIT_SUCCESS);
 			}
-			
+
 			cmdLineParams.sdmIP = argv[i + 1];
 			std::cout << "Passed in stimulus display machine IP: " << cmdLineParams.sdmIP << std::endl;
 		}
@@ -342,6 +348,7 @@ int main(int argc, char* argv[]) {
 
 		decoderThreads.push_back(std::thread(runDecoder, mainServer, sorterImecAddrs, sorterNidqAddrs, decoderParams, mNC));
 	}
+//	std::cout << "KS is skipping the decoder" << std::endl;
 
 	// Start up GUI
 	gui.plotOutputs(mainAddr, params.iMaxScanWindow, params.iAvgWindowTime, params.bIsDecoding);
@@ -356,7 +363,7 @@ int main(int argc, char* argv[]) {
 	for (int i = 0; i < numSorters; i++) {
 		decoderThreads[i].join();
 	}
-	
+
 	logFile.close();
 	return 0;
 }

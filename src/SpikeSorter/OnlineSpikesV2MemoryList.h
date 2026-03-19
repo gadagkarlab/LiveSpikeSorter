@@ -18,7 +18,7 @@ enum MemoryType {
 				// put memory that is often moved between host and device onto pinned memory, it lives "closer" to the device (to my knowledge)
 };
 
-
+//KS added NI_BUFF
 #define MEMORY_VARIABLES \
     /* Host Memory */ \
     X(float, D_chan_samp_temp, Host, C * M * T) \
@@ -32,6 +32,7 @@ enum MemoryType {
 	X(float, spikeAmplitudes, Pinned, unclu_T * W) \
 	X(float, closest_x, Pinned, unclu_T * W) \
 	X(float, closest_y, Pinned, unclu_T * W) \
+	X(float, NI_buff, Pinned, 5000) \
     \
     /* Device Memory */ \
     X(float, d_convResult, Device, 5 * (W + 2 * (M - 1)) * unclu_T) \

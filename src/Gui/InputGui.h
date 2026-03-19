@@ -48,6 +48,10 @@ private:
 	void gatherSorterParameters();
 	void gatherParallelizedOSSInputs();
 	void gatherDecoderParameters();
+	// BRIAN
+	void gatherFeedbackParameters();
+	void writeParamFile();
+	//
 	double CalcBytes(long L, long C, long M, long MaxWin, long MinWin, long SpikesExpected);
 
 

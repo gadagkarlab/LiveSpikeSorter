@@ -26,21 +26,22 @@
 #include <thrust/copy.h>
 #include <thrust/iterator/counting_iterator.h>
 
+#include "../../External/sglx/SglxApi.h"
+
 class OnlineSpikesV2
 {
 public:
 	OnlineSpikesV2(InputParameters Params, sockaddr_in mainAddr, DataSocket* m_NC);
 	~OnlineSpikesV2();
 	void runSpikeSorting();
-	void runSyllDetectThenSorting(std::vector<int> targetPulseCounts, float delay1_ms, float delay2_ms, float delay3_ms, std::unordered_set<int> targetTemplates,
-		int matchesThreshold);// KS- main fxn 
+	void runSyllDetectThenSorting(InputParameters params);// KS- main fxn 
 	//void runTriggeredWithContinuousSorting(); // KS- fxn  not implemented 
 
 private:
 	// for sorting
 	void initializeSorter(InputParameters params);
 	void establishDecoderConnection(sockaddr_in mainAddr);
-	void loadTemplatesShape(std::string filepath); 
+	void loadTemplatesShape(std::string filepath);
 	void loadKilosortParameters(std::string directoryPath);
 	void loadPreclusterShapes(std::string filepath);
 	void initializeStaticMemory(InputParameters params);
@@ -64,12 +65,13 @@ private:
 
 	SorterParameters getSorterParams();
 	void writeSpikesToFile(std::vector<long> spikeTimes, std::vector<long> spikeTemplates, std::vector<float> spikeAmplitudes);
+	void writeSpikesToFile_syllable(std::vector<long> spikeTimes, std::vector<long> spikeTemplates, std::vector<float> spikeAmplitudes, std::ofstream& syllLogFile);
 	void saveSpikes(long lNInds, long lStreamSampleCtOffset, long lEndValid, std::vector<long>& Times, std::vector<long>& Templates, std::vector<float>& Amplitudes);
 
 
 	// KS- for syllable detecting + sorting + triggering 
-	void OnlineSpikesV2::countNidqRisingEdgesInBuffer(const float* fetchBuf, t_ull bufferStartCt, t_ull nFetched, bool& prevHigh, int& edgeCount, std::vector<t_ull>& edgeTimes);
-	
+	void OnlineSpikesV2::countNidqRisingEdgesInBuffer(const float* NI_buff, t_ull bufferStartCt, t_ull nFetched, bool& prevHigh, int& edgeCount, std::vector<t_ull>& edgeTimes);
+
 
 	// Debug
 	std::string ossOutputDir;
@@ -80,11 +82,11 @@ private:
 	int substream;
 
 	// Host + device pointers, defined in OnlineSpikesV2MemoryList.h --- read about X-macros online
-	#define X(type, name, memType, size) type *name;
-		MEMORY_VARIABLES
-	#undef X
+#define X(type, name, memType, size) type *name;
+	MEMORY_VARIABLES
+#undef X
 
-	myCudnnConvolution	cudnnConvObj; // object to handle convolutions
+		myCudnnConvolution	cudnnConvObj; // object to handle convolutions
 	cublasHandle_t		cublasHandle; // handle for cublas computations
 	cusolverDnHandle_t  cuSolverHandle; // handle for cusolver computations
 	int filterLen;
@@ -94,7 +96,7 @@ private:
 	long unclu_T; // number of templates prior to Kilosort's clustering
 	long T; // number of templates
 	long M; // number of samples in a template
- 	long C; // number of channels
+	long C; // number of channels
 	long W; // number of samples per batch
 	long nt0min; // kilosort param
 	long numNearestChans; // kilosort param
@@ -106,8 +108,8 @@ private:
 	long timeBehind; // Time (ms) we are allowed to be behind from SGLX; 0: skip batches if behind, >= 100'000: no skip
 	long downsampling; // Factor we are temporally downsampling
 	float samplingRate; // KS- this the IMEC samprate that the original fxn uses 
-	float IMsamplingRate; // KS- added IMEC sampling rate (hz)
-	float NIsamplingRate; // KS- added NI sampling rate Hz 
+	//float IMsamplingRate; // KS- added IMEC sampling rate (hz) HARDCODED IN FXN
+	//float NIsamplingRate; // KS- added NI sampling rate Hz  HARDCODED IN FXN 
 	int nidqRefreshRate; // NIDQ refresh rate (no idea what units or anything)
 	bool smallSkip;
 
@@ -144,6 +146,9 @@ private:
 
 	// Thrust vector for matching to find local maxima, change later to normal device vector
 	thrust::device_vector<long> d_spikeIndices;
+	
+	//void  *S;
+	//cppClient_sglx_fetch io; // KS for new fetches  
 
 	// 
 };

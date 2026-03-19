@@ -8,6 +8,12 @@
 #include "InputGui.h"
 #include "tinyfiledialogs/tinyfiledialogs.h"
 #include <algorithm>
+// BRIAN
+#include <sstream>
+#include <vector>
+#include <string>
+#include <iostream>
+#include <fstream>
 
 InputGUI::InputGUI(InputParameters cmdLineParams)
 	: computerJob(_GUI),
@@ -114,6 +120,22 @@ InputGUI::InputGUI(InputParameters cmdLineParams)
 	Params.iWindowLength = 3000;
 	Params.iBinLength = 30;
 	Params.iWindowOffset = 4500;
+
+	// BRIAN 
+	Params.fDelay1 = 150.0;
+	Params.fDelay2 = 160.0;
+	Params.fDelay3 = 170.0;
+	Params.usTemplateIdx = { 1, 2 };
+	Params.sTemplateIdx = "1 2";
+	Params.iThresh = 20;
+	Params.bThreshMode = false;
+	Params.vSylNum = { 1, 2 };
+	Params.sSylNum = "1 2";
+	Params.bFeedbackMode = false;
+	Params.iDigLineIdx = 4;
+	Params.fPulseWindow = 10.0;
+	Params.iNumAnChans = 10;
+
 }
 
 
@@ -165,7 +187,7 @@ void InputGUI::InputTextWithFileDialog(
 	bool folderSelect = false
 ) {
 	ImGui::PushItemWidth(733);
-	ImGui::InputText(label, str); 
+	ImGui::InputText(label, str);
 	ImGui::PopItemWidth();
 
 	ImGui::SameLine();
@@ -175,8 +197,8 @@ void InputGUI::InputTextWithFileDialog(
 			selection = tinyfd_openFileDialog("Select File", initDirectory, numFilterPatterns, filterPatterns, NULL, allowMultipleSelect);
 		else // Folder select
 			selection = tinyfd_selectFolderDialog("Select Folder", initDirectory);
-		
-		if (selection != NULL && !folderSelect) 
+
+		if (selection != NULL && !folderSelect)
 			*str = selection;
 		else if (selection != NULL && folderSelect)
 			*str = std::strcat(selection, "\\");
@@ -197,7 +219,7 @@ std::string InputGUI::getDeviceInfo(int deviceNumber) {
 }
 
 void InputGUI::gatherNetworkParameters() {
-	
+
 }
 
 void InputGUI::gatherDataAccquisitionParameters() {
@@ -326,7 +348,7 @@ void InputGUI::gatherThresholdCrossingParameters() {
 
 	ImGui::Text("Threshold in standard deviations:");
 	ImGui::SameLine(); HelpMarker("The number of standard deviations away from the mean that we should denote as the threshold for spikes.");
-	ImGui::InputFloat("##ThresholdStd", &Params.fThresholdStd, 0.1,1.0);
+	ImGui::InputFloat("##ThresholdStd", &Params.fThresholdStd, 0.1, 1.0);
 }
 
 void  InputGUI::gatherSorterParameters() {
@@ -433,7 +455,7 @@ void InputGUI::gatherInputParameters(bool &finished, bool &isNetworking)
 	ImGui::Begin("OnlineSorter Input Interface", NULL, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize);
 	ImGui::PushItemWidth(780); // Set widget (text inputs) width
 
-	if (ImGui::CollapsingHeader("Data Accquisition Parameters")) 
+	if (ImGui::CollapsingHeader("Data Accquisition Parameters"))
 		gatherDataAccquisitionParameters();
 
 	if (ImGui::CollapsingHeader("GPU Parameters"))
@@ -450,9 +472,91 @@ void InputGUI::gatherInputParameters(bool &finished, bool &isNetworking)
 	if (ImGui::CollapsingHeader("Decoder Parameters"))
 		gatherDecoderParameters();
 
-	if (ImGui::Button("Start Online Sorting", { 785,75 }))
-		finished = true;
+	if (ImGui::CollapsingHeader("Feedback Parameters"))
+		gatherFeedbackParameters();
 
+	if (ImGui::Button("Start Online Sorting", { 785,75 }))
+	{
+		// BRIAN -- CONVERT STRINGS TO VEC/UNORDERED SET
+		std::stringstream iss_syl(Params.sSylNum);
+		int number_syl;
+		while (iss_syl >> number_syl)
+			Params.vSylNum.push_back(number_syl);
+
+		std::stringstream iss_temp(Params.sTemplateIdx);
+		int number_temp;
+		while (iss_temp >> number_temp)
+			Params.usTemplateIdx.insert(number_temp);
+		// And print to a parameter file
+		InputGUI::writeParamFile();
+
+		finished = true;
+	}
 	ImGui::End();
 };
 
+
+
+
+// BRIAN
+
+void InputGUI::gatherFeedbackParameters() {
+	ImGui::Checkbox("Use Feedback Mode.", &Params.bFeedbackMode);
+	if (Params.bFeedbackMode) {
+		ImGui::Text("Delay 1 (ms):");
+		ImGui::SameLine(); HelpMarker("Time between syllable onset and start of window in which spikes will be counted.");
+		ImGui::InputFloat("##Delay1", &Params.fDelay1, 1, 10, "%.2f");
+		ImGui::Text("Delay 2 (ms):");
+		ImGui::SameLine(); HelpMarker("Time between syllable onset and end of window in which spikes will be counted.");
+		ImGui::InputFloat("##Delay2", &Params.fDelay2, 1, 10, "%.2f");
+		ImGui::Text("Delay 3 (ms):");
+		ImGui::SameLine(); HelpMarker("Time between syllable onset and feedback onset.");
+		ImGui::InputFloat("##Delay3", &Params.fDelay3, 1, 10, "%.2f");
+
+		ImGui::Text("Threshold:");
+		ImGui::SameLine(); HelpMarker("Number of spikes below/above (set by following tickbox) which feedback is triggered.");
+		ImGui::InputInt("##Threshold", &Params.iThresh, 1, 10);
+
+		ImGui::Checkbox("Trigger Feedback Below (unchecked) or Above (checked) Threshold.", &Params.bThreshMode);
+
+		ImGui::Text("Syllable Number(s):");
+		ImGui::SameLine(); HelpMarker("The indices of syllables of interest as integers with spaces between.");
+		ImGui::InputText("##SylNumStr", &Params.sSylNum, ImGuiInputTextFlags_CharsDecimal, 0, 0); // Later converted to a vector
+
+		ImGui::Text("Template Indices:");
+		ImGui::SameLine(); HelpMarker("The indices of templates of interest as integers with spaces between.");
+		ImGui::InputText("##TempIdxStr", &Params.sTemplateIdx, ImGuiInputTextFlags_CharsDecimal, 0, 0); // Later converted to an unordered set
+
+		ImGui::Text("Syllable Count Digital Line Index:");
+		ImGui::InputInt("##DigLine", &Params.iDigLineIdx, 1, 2);
+
+		ImGui::Text("Number of Analog Channels on NI Card:");
+		ImGui::InputInt("##NumAnChans", &Params.iNumAnChans, 1, 2);
+
+		ImGui::Text("Pulse Window (ms):");
+		ImGui::SameLine(); HelpMarker("Duration over which syllable-number-identifying pulses are counted.");
+		ImGui::InputFloat("##PulseWindow", &Params.fPulseWindow, 1, 10, "%.2f");
+
+
+	}
+}
+// 
+
+
+// BRIAN
+
+void InputGUI::writeParamFile() {
+	std::ofstream ParamFile("params.txt");
+	ParamFile << "Input Folder, " << Params.sInputFolder << std::endl;
+	ParamFile << "IMEC File, " << Params.sImecFile << std::endl;
+	ParamFile << "NIDQ File, " << Params.sNidqFile << std::endl;
+	ParamFile << "Spikes File, " << Params.sSpikesFile << std::endl;
+	ParamFile << "Event File, " << Params.sEventFile << std::endl;
+	ParamFile << "Data Acquisition Host, " << Params.sDataAccquisitionHost << std::endl;
+	ParamFile << "Decoder Work Folder, " << Params.sDecoderWorkFolder << std::endl;
+	ParamFile << "Decoder Input Folder, " << Params.sDecoderInputFolder << std::endl;
+	ParamFile << "OSS Output Folder, " << Params.sOSSOutputFolder << std::endl;
+	ParamFile << "Syllable Number List, " << Params.sSylNum << std::endl;
+	ParamFile << "Template Index List, " << Params.sTemplateIdx << std::endl;
+	ParamFile.close();
+}

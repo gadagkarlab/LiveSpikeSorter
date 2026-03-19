@@ -33,7 +33,7 @@ StreamDataSocket::StreamDataSocket(std::string accquisitionHost, uint16 accquisi
 	, m_iSubstream(substream)
 	//, m_vImecChannels(channelMap, channelMap + lNChans) // Fill vector with values of *int array
 	// KS - NI DIG LINE IS HARDCODED HERE for me it should be 3rd bc i have 2 analog chans, 0 indexed !
-	, m_vNidqChannels({8}) // Extracting only the digital line, for NISIM its the chan 8
+	, m_vNidqChannels({ 2 }) //# analog chans + 1 
 {
 	static const char *ptLabel = { "StreamDataSocket::StreamDataSocket" };
 
@@ -66,7 +66,7 @@ bool StreamDataSocket::connect() {
 			printf("error [%s]\n", S.err.c_str());
 		}
 	}
-			std::cout << "...Connection successful!" << std::endl;
+	std::cout << "...Connection successful!" << std::endl;
 	//m_mSGlxMutex.unlock();
 	return true;
 }
@@ -149,7 +149,7 @@ t_ull StreamDataSocket::fetchLatest_TC(float *fData, OSSSpecificParams osParams,
 	//std::cout << "number of samples: " << lToGet << std::endl;
 	//std::cout << "number of channels: " << m_lNChans << std::endl;
 
-	return lLatestCt,lToGet;
+	return lLatestCt, lToGet;
 }
 
 // fetchFromPlace: lStreamSampleCt (the start of the fetch) is constant
@@ -172,12 +172,14 @@ t_ull StreamDataSocket::fetchFromPlace(float *fData, OSSSpecificParams osParams,
 t_ull StreamDataSocket::fetchImecExact(float *fData, OSSSpecificParams osParams, t_ull lStartCt, t_ull lEndCt)
 {
 	t_ull lToGet = lEndCt - lStartCt;
-	fetch(m_sFetchBuffer, S, IMEC, osParams.substream, lStartCt, lToGet, osParams.vImecChannels);
+
+	t_ull lLatestCt = fetch(m_sFetchBuffer, S, IMEC, osParams.substream, lStartCt, lToGet, osParams.vImecChannels);
 
 	//Fill data buffer with m_sFetchBuffer
 	for (long lI = 0; lI < lToGet * osParams.lNChans; lI++)
 		fData[lI] = (float)m_sFetchBuffer[lI];
 
+	return lLatestCt;
 }
 
 t_ull StreamDataSocket::initNidqStream() {
@@ -193,9 +195,9 @@ t_ull StreamDataSocket::initNidqStream() {
 
 
 //KS made based on StreamDataSocket::fetchLatest
-t_ull StreamDataSocket::fetchNidqLatest(float *fData, OSSSpecificParams osParams, t_ull lStartCt,int m_nMaxSize, int m_nMinSize){
+t_ull StreamDataSocket::fetchNidqLatest(float *fData_NI, OSSSpecificParams osParams, t_ull lStartCt, int m_nMaxSize, int m_nMinSize) {
 	//just copied from fetchLatest need to figure out how to get the right bit for my digline. this assumes i will never fall behind 
-	
+
 	t_ull lLatestCt = getStreamSampleCt(NIDQ, osParams);
 
 	t_ull lToGet = lLatestCt - lStartCt;
@@ -211,13 +213,18 @@ t_ull StreamDataSocket::fetchNidqLatest(float *fData, OSSSpecificParams osParams
 
 
 	lLatestCt = fetch(m_sNidqBuffer, S, NIDQ, 0, lStartCt, lToGet, m_vNidqChannels);// hard code in digital params 
-	
-	constexpr int bitIdx = 3;// hardcoded line i expect my syll code to come on 
+
+	// BRIAN
+//	for (int i = 0; i < lToGet; i++)
+//		std::cout << m_sNidqBuffer[i] << ' ';
+//	std::cout << std::endl;
+
+	constexpr int bitIdx = 2;// hardcoded line i expect my syll code to come on 
 	//Fill fData with m_sNidqBuffer's contents after selecting my digital word buffer should b ok 
 	for (t_ull lI = 0; lI < lToGet; ++lI) {
-		uint16_t word = static_cast<uint16_t>(m_sNidqBuffer[lI]);
-		int bitVal = (word >> bitIdx) & 1;
-		fData[lI] = static_cast<float>(bitVal);
+		int bitVal = (m_sNidqBuffer[lI] >> bitIdx) & 1;
+		fData_NI[lI] = static_cast<float>(bitVal);
+		//if (bitVal==1) { std::cout << "Gotcha!" << std::endl; }
 	}
 	return lLatestCt;
 }
@@ -226,13 +233,13 @@ t_ull StreamDataSocket::fetchNidqLatest(float *fData, OSSSpecificParams osParams
 t_ull StreamDataSocket::fetchEventInfo(int &eventLabel, t_ull lStartCt, OSSSpecificParams osParams) {
 	// Compute how many samples needed to get to present time
 	//lToGet is always zero
-	
+
 	efficientWait(20);
 	t_ull lToGet = getStreamSampleCt(NIDQ, osParams) - lStartCt;
 	lToGet = getStreamSampleCt(NIDQ, osParams) - lStartCt;
 	//std::cout << lToGet << "\n";
 	// Fetch NIDQ data (substream is 0 by convention)
-	
+
 	//m_mSGlxMutex.lock();
 	t_ull lLatestCt;
 	{
@@ -241,46 +248,37 @@ t_ull StreamDataSocket::fetchEventInfo(int &eventLabel, t_ull lStartCt, OSSSpeci
 	}
 	//m_mSGlxMutex.unlock();
 	// Search the data for a non zero and break out if found, identifying the stimulus event label
-	
+
 	for (int i = 0; i < m_sNidqBuffer.size(); i++) {
-		if (m_sNidqBuffer[i]==2||m_sNidqBuffer[i]==4) {
+		if (m_sNidqBuffer[i] == 2 || m_sNidqBuffer[i] == 4) {
 			eventLabel = m_sNidqBuffer[i];
 			std::cout << eventLabel;
 			efficientWait(100);
 			//std::cout << "TRIAL!";
-			
+
 			break;
-			
+
 		}
 	}
-	
+
 	return lLatestCt;
 }
 
 //fetch & translate digital syllable code 
 
 //KS needs to check the lines I use and make sure it works. this uses a much older form of the API and im moderately concerened neweer SGLx wont support it
-void StreamDataSocket::setDigitalOut(int signal) { 
-	static const int nBits = sizeof(short) * 8; // number bits in a byte = 8
-	bool hiLo;
-	std::string line;
-	std::cout << "IN DIGITAL OUT";
-	std::cout << signal;
-	if (signal==0)
-	{
-		std::cout << "Hello 4";
-		sglx_setDigitalOut(S, 1, "PXI1Slot6/port0/line5");//dig line is hardcoded here 
-		sglx_setDigitalOut(S, 0, "PXI1Slot6/port0/line5");
+void StreamDataSocket::setDigitalOut(int signal) {
+		//Sleep(1);
+		sglx_setDigitalOut(S, 1, "PXI1Slot4/port0/line5");//dig line is hardcoded here 
+		Sleep(2);
+		sglx_setDigitalOut(S, 0, "PXI1Slot4/port0/line5");
 
-		}
-	if (signal==1)
-	{
-		std::cout << "Hello 2";
-		sglx_setDigitalOut(S, 1, "PXI1Slot2/port1/line2");
-		efficientWait(100);
-		sglx_setDigitalOut(S, 0, "PXI1Slot2/port1/line2");
-		
 	}
+//	else
+//	{
+//		sglx_setDigitalOut(S, 0, "PXI1Slot4/port0/line5");
+
+//	}
 
 	// feedbackSignal == 0 signifies setting nidq stream out back to 0
 
@@ -291,10 +289,10 @@ void StreamDataSocket::setDigitalOut(int signal) {
 		hiLo = binaryFeedbackSignal[i] == '1' ? true : false;
 		line = "PXI1Slot2/port1/line" + std::to_string(i + 1); // TODO It appeared that the line was 1 indexed (why there's a plus 1), but double check
 		sglx_setDigitalOut(S, hiLo, "PXI1Slot2/port1/line1");
-		
-		
+
+
 	}*/
-}
+
 
 
 bool StreamDataSocket::isRunning() {

@@ -39,8 +39,6 @@
     <ClCompile Include="src\Helpers\TimeHelpers.cpp">
       <Filter>Helpers</Filter>
     </ClCompile>
-    <ClCompile Include="External\sglx\SglxCppClient.cpp" />
-    <ClCompile Include="src\SpikeGLX-CPP-SDK-main\SpikeGLX-CPP-SDK-main\API\SglxCppClient.cpp" />
     <ClCompile Include="src\SpikeSorter\mockStreamDataSocket.cpp" />
     <ClCompile Include="src\SpikeSorter\ThresholdCrossing.cpp" />
     <ClCompile Include="src\Decoder\BaseModel.cpp" />
@@ -50,6 +48,7 @@
     <ClCompile Include="src\Decoder\SKLearnModel.cpp" />
     <ClCompile Include="src\Gui\OutputGuiTab.cpp" />
     <ClCompile Include="src\Gui\OutputGui.cpp" />
+    <ClCompile Include="External\sglx\SglxCppClient.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\NetClient\NetClient.h" />
@@ -111,10 +110,6 @@
       <Filter>Input</Filter>
     </ClInclude>
     <ClInclude Include="External\tinyfiledialogs\tinyfiledialogs.h" />
-    <ClInclude Include="External\sglx\SglxApi.h" />
-    <ClInclude Include="External\sglx\SglxCppClient.h" />
-    <ClInclude Include="src\SpikeGLX-CPP-SDK-main\SpikeGLX-CPP-SDK-main\API\SglxApi.h" />
-    <ClInclude Include="src\SpikeGLX-CPP-SDK-main\SpikeGLX-CPP-SDK-main\API\SglxCppClient.h" />
     <ClInclude Include="src\SpikeSorter\ThresholdCrossing.h" />
     <ClInclude Include="src\SpikeSorter\mockStreamDataSocket.h" />
     <ClInclude Include="src\Decoder\BaseModel.h" />
@@ -128,6 +123,8 @@
     <ClInclude Include="src\SpikeSorter\TensorWrapper.h" />
     <ClInclude Include="src\Gui\OutputGuiTab.h" />
     <ClInclude Include="src\Gui\OutputGui.h" />
+    <ClInclude Include="External\sglx\SglxApi.h" />
+    <ClInclude Include="External\sglx\SglxCppClient.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="OnlineSpikes.rc" />
