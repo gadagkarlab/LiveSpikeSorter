@@ -649,7 +649,6 @@ void OnlineSpikesV2::countNidqRisingEdgesInBuffer(const float* fetchBuf, t_ull p
 	
 	edgeCount = 0;
 	edgeTimes.clear();
-
 	for (t_ull i = 0; i < nFetched; ++i) {
 		bool high = (fetchBuf[i] >= 0.5f);
 
@@ -708,7 +707,7 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 
 	// timespec's to keep track of processing time to be sent to the Decoder
 	struct timespec batchBefore, batchAfter;
-
+		
 	// file to write syllable/spike log to
 	std::ofstream syllLogFile("syll_log.txt");
 
@@ -734,7 +733,7 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 
 	while (true) {
 		//assuming i never fall behind the NIstream 
-
+		NI_processedCT = NI_latestCt; // BRIAN CHANGED AGAIN
 		NI_latestCt = sglxSock->fetchNidqLatest(NI_buff, osParams, NI_processedCT);
 
 		NI_nFetched = NI_latestCt - NI_processedCT;
@@ -742,171 +741,165 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 
 		countNidqRisingEdgesInBuffer(NI_buff, NI_processedCT, NI_nFetched, prevHigh, edgeCount, edgeTimes);//KS- this buffer is the only digital bit i care about
 		
-		pulsesInWindow = edgeTimes.size();
-		//for (t_ull edget : edgeTimes) {
-		//	recentEdges.push_back(edget);
-		//	while (!recentEdges.empty() &&
-		//		edget - recentEdges.front() > pulseWindowSamples) { //ks- feels like this is not robust? 
-		//		recentEdges.pop_front();
-		//	}
-		//	pulsesInWindow = recentEdges.size();
-		//}
-		
-		//pulses in window = syllable ID 
-		//std::cout << "syll # =  " << pulsesInWindow << std::endl;
-		if (std::find(targetPulseCounts.begin(),
-			targetPulseCounts.end(),
-			pulsesInWindow) != targetPulseCounts.end()) 
-			{
-
-			std::cout << "syl # in loop =  " << pulsesInWindow << std::endl;
-			syllImCt = sglxSock->getStreamSampleCt(IMEC,osParams);// now in a syllable i want to get ready for sorting 
-			targStartCt = syllImCt + (delay1_ms * IMsamplingRate / 1000) - 40;// sample indices i want to sort 
-			targEndCt = syllImCt + (delay2_ms * IMsamplingRate / 1000) + 40;			
-			FeedbackCt = syllImCt + (delay3_ms * IMsamplingRate / 1000);
-			sglxSock->waitUntil(targEndCt + 40, osParams); // rough wait until samples should b ready, is there any better way to do it? 
+		//pulsesInWindow = edgeTimes.size();
+		for (t_ull edget : edgeTimes) {
+			recentEdges.push_back(edget);
+		}
+		if (recentEdges.size() > 0) {
 			
-			clock_gettime(batchBefore);
-			//IM_latestCt = sglxSock->fetchLatest(fetchBuf, osParams, targStartCt);
-			IM_latestCt = sglxSock->fetchImecExact(fetchBuf, osParams, targStartCt, targEndCt);
-			currBatchNumSamples = IM_latestCt- targStartCt; 
-			//std::cout << 
-			//for (size_t i = 0; i < 100; ++i) {
-			//	std::cout << fetchBuf[i] << " ";
-			//}
-			{
-				Timer timer("cpu to gpu");
-				if (skip) {	
-					// Skip the last minScanWindow of previous batch (the first m_lMinWindow * m_lC bits)
-					_CUDA_CALL(cudaMemcpy(d_fetchBuf, fetchBuf + minWindow * C, C * currBatchNumSamples * sizeof(float), cudaMemcpyHostToDevice));
-
-					// Increment skip counter
-					skipCounter++;
-				}
-				else {
-					_CUDA_CALL(cudaMemcpy(d_fetchBuf, fetchBuf, C * currBatchNumSamples * sizeof(float), cudaMemcpyHostToDevice));
-				}
-				_CUDA_CALL(cudaDeviceSynchronize());
-			}
-			// Calculate peak-to-peak for OutputGUI
-			// TODO: Try and make it compute P2P per channel, send it to the GUI, write GUI to display per-channel P2P, and then 
-			//			make sure the computations for P2P per channel is fast by writing custom kernel
-			p2p = P2P_calc(d_fetchBuf, C * currBatchNumSamples);
-			// Remove means
-			_CUDA_CALL(cudaMemset(d_means, 0, C * sizeof(float)));
-			{
-				Timer timer("meanRemove()");
-				meanRemove(d_fetchBuf, d_means, currBatchNumSamples, C);
-			}
-			_CUDA_CALL(cudaDeviceSynchronize());
-			// Median removal
-			{
-				Timer timer("medianRemove()");
-				medianRemove(d_fetchBuf, C, currBatchNumSamples);
-			}
-			_CUDA_CALL(cudaDeviceSynchronize());
-			// Perform a high-pass filter at 300 hz assuming the signal is at 30000 hz
-			{
-				Timer timer("highpassFilter()");
-				transpose(d_fetchBuf, d_fetchBuf2, currBatchNumSamples, C);
-				highpassFilter(d_fetchBuf2, C, currBatchNumSamples, 30000, 300);
-			}
-			_CUDA_CALL(cudaDeviceSynchronize());
-			// Whiten the batch on device (THIS WORKS FOR SURE, DO NOT TOUCH OR WORRY ABOUT IT)
-			{
-				Timer timer("whitening()");
-				matMul(cublasHandle, d_whitening, d_fetchBuf2, d_fetchBuf, C, C, currBatchNumSamples);
-			}
-			_CUDA_CALL(cudaDeviceSynchronize());
-			// Drift correct
-			{	//KS im also worried about doing this drift from my morning recording is likely to be much worse than later in the day.
-				Timer timer("driftCorrection()");
-				matMul(cublasHandle, d_driftMatrix, d_fetchBuf, d_fetchBuf2, C, C, currBatchNumSamples);
-			}
-			_CUDA_CALL(cudaDeviceSynchronize());
-			// Perform OMP
-			numSpikes = kilosortMatchingPursuit(d_fetchBuf2, currBatchNumSamples);
-			std::cout << "currBatch Samples= " << currBatchNumSamples << " and had numSpikes= " << numSpikes << std::endl;
-
-			// Use results of OMP to assign unmapped spike templates to the closest clusters
-			// - inputs: d_spikeTemplates, d_spikeTimes, d_residual
-			// - outputs: closest_x, closest_y
-			{
-				Timer timer("closestCluster()");// KS- im worried about this function is it just estimating spike positions? 
-				computeClosestClusters(currBatchNumSamples, numSpikes);
-			}
-
-			// Save the spikes into times, templates, amplitudes
-			int kms = templates.size();
-			std::cout << "pre saveSpikes templates.size()= " <<  kms << std::endl;
-			std::cout<< "and numSpikes = " << numSpikes << std::endl;
-			saveSpikes(numSpikes, targStartCt, IM_latestCt, times, templates, amplitudes);
-			
-			int ntemps = templates.size();
-			std::cout << "post saveSpikes templates.size()= " << ntemps << std::endl;
-
-			//Timer timer("cpu to gpu");
-			int templateMatches = 0;
-			for (int templ : templates) {
-				if (targetTemplates.count(templ)) {
-					++templateMatches;
-				}
-			}
-			clock_gettime(batchAfter);
-			long processTime = GetTimeDiff(batchAfter, batchBefore);
-
-			// BRIAN write to syllable log file 
-			syllLogFile << "Syllable index = " << pulsesInWindow << ", template matches = " << templateMatches << " out of total templates= " << ntemps
-				<< ", after NI edge sample " << edgeTimes[0]
-				<< ", IM window [" << targStartCt
-				<< ", " << targEndCt << "]" 
-				<< "processesing time = "<< processTime << std::endl;
-			//does this loop break do what i think its doiung??? 
-
-			bool shouldFeedback = params.bThreshMode
-				? (templateMatches >= matchesThreshold)
-				: (templateMatches < matchesThreshold);
-
-			if (shouldFeedback){
-				while (sglxSock->getStreamSampleCt(IMEC,osParams) < FeedbackCt) {
-					std::cout << "waiting for feedback" << std::endl;
-					//keep getting sample count until i pass feedback time 
-				}
-				//now we've passed the required feedback time
-				sglxSock->setDigitalOut(0);//fxn autosets line hi->lo
-				NI_processedCT = NI_latestCt;// sglxSock->getStreamSampleCt(NIDQ, osParams);
-				OnlineSpikesPayload payload = { recordingOffset,
-								IM_latestCt,
-								times,
-								templates,
-								amplitudes,
-								rootMeanSquared,
-								p2p,
-								processTime
-				};
-
-				sendPayload(&imecFm, payload, decoderImecAddr);
-
+			if (NI_latestCt - recentEdges.back() > 50) {// now ready to label a syllable 
+				std::cout << "time delta for loop = " << NI_latestCt - recentEdges.back() << std::endl; 
+				pulsesInWindow = recentEdges.size();
 				recentEdges.clear();
+				//pulses in window = syllable ID 
+				std::cout << "syll # =  " << pulsesInWindow << std::endl;
+				if (std::find(targetPulseCounts.begin(),
+					targetPulseCounts.end(),
+					pulsesInWindow) != targetPulseCounts.end()) 
+					{
+
+					syllImCt = sglxSock->getStreamSampleCt(IMEC,osParams);// now in a syllable i want to get ready for sorting 
+			
+					targStartCt = syllImCt + (delay1_ms * IMsamplingRate / 1000) - 40;// sample indices i want to sort 
+					targEndCt = syllImCt + (delay2_ms * IMsamplingRate / 1000) + 40;			
+					FeedbackCt = syllImCt + (delay3_ms * IMsamplingRate / 1000);
+					sglxSock->waitUntil(targEndCt + 40, osParams); // rough wait until samples should b ready, is there any better way to do it? 
+			
+					clock_gettime(batchBefore);
+					//IM_latestCt = sglxSock->fetchLatest(fetchBuf, osParams, targStartCt);
+					IM_latestCt = sglxSock->fetchImecExact(fetchBuf, osParams, targStartCt, targEndCt);
+					currBatchNumSamples = IM_latestCt- targStartCt; 
+					//std::cout << 
+					//for (size_t i = 0; i < 100; ++i) {
+					//	std::cout << fetchBuf[i] << " ";
+					//}
+					{
+						Timer timer("cpu to gpu");
+						if (skip) {	
+							// Skip the last minScanWindow of previous batch (the first m_lMinWindow * m_lC bits)
+							_CUDA_CALL(cudaMemcpy(d_fetchBuf, fetchBuf + minWindow * C, C * currBatchNumSamples * sizeof(float), cudaMemcpyHostToDevice));
+
+							// Increment skip counter
+							skipCounter++;
+						}
+						else {
+							_CUDA_CALL(cudaMemcpy(d_fetchBuf, fetchBuf, C * currBatchNumSamples * sizeof(float), cudaMemcpyHostToDevice));
+						}
+						_CUDA_CALL(cudaDeviceSynchronize());
+					}
+					// Calculate peak-to-peak for OutputGUI
+					// TODO: Try and make it compute P2P per channel, send it to the GUI, write GUI to display per-channel P2P, and then 
+					//			make sure the computations for P2P per channel is fast by writing custom kernel
+					p2p = P2P_calc(d_fetchBuf, C * currBatchNumSamples);
+					// Remove means
+					_CUDA_CALL(cudaMemset(d_means, 0, C * sizeof(float)));
+					{
+						Timer timer("meanRemove()");
+						meanRemove(d_fetchBuf, d_means, currBatchNumSamples, C);
+					}
+					_CUDA_CALL(cudaDeviceSynchronize());
+					// Median removal
+					{
+						Timer timer("medianRemove()");
+						medianRemove(d_fetchBuf, C, currBatchNumSamples);
+					}
+					_CUDA_CALL(cudaDeviceSynchronize());
+					// Perform a high-pass filter at 300 hz assuming the signal is at 30000 hz
+					{
+						Timer timer("highpassFilter()");
+						transpose(d_fetchBuf, d_fetchBuf2, currBatchNumSamples, C);
+						highpassFilter(d_fetchBuf2, C, currBatchNumSamples, 30000, 300);
+					}
+					_CUDA_CALL(cudaDeviceSynchronize());
+					// Whiten the batch on device (THIS WORKS FOR SURE, DO NOT TOUCH OR WORRY ABOUT IT)
+					{
+						Timer timer("whitening()");
+						matMul(cublasHandle, d_whitening, d_fetchBuf2, d_fetchBuf, C, C, currBatchNumSamples);
+					}
+					_CUDA_CALL(cudaDeviceSynchronize());
+					// Drift correct
+					{	//KS im also worried about doing this drift from my morning recording is likely to be much worse than later in the day.
+						Timer timer("driftCorrection()");
+						matMul(cublasHandle, d_driftMatrix, d_fetchBuf, d_fetchBuf2, C, C, currBatchNumSamples);
+					}
+					_CUDA_CALL(cudaDeviceSynchronize());
+					// Perform OMP
+					numSpikes = kilosortMatchingPursuit(d_fetchBuf2, currBatchNumSamples);
+					std::cout << "currBatch Samples= " << currBatchNumSamples << " and had numSpikes= " << numSpikes << std::endl;
+
+					// Use results of OMP to assign unmapped spike templates to the closest clusters
+					// - inputs: d_spikeTemplates, d_spikeTimes, d_residual
+					// - outputs: closest_x, closest_y
+					{
+						Timer timer("closestCluster()");// KS- im worried about this function is it just estimating spike positions? 
+						computeClosestClusters(currBatchNumSamples, numSpikes);
+					}
+
+					// Save the spikes into times, templates, amplitudes
+					int kms = templates.size();
+					std::cout << "pre saveSpikes templates.size()= " <<  kms << std::endl;
+					std::cout<< "and numSpikes = " << numSpikes << std::endl;
+					saveSpikes(numSpikes, targStartCt, IM_latestCt, times, templates, amplitudes);
+			
+					int ntemps = templates.size();
+					std::cout << "post saveSpikes templates.size()= " << ntemps << std::endl;
+
+					//Timer timer("cpu to gpu");
+					int templateMatches = 0;
+					for (int templ : templates) {
+						if (targetTemplates.count(templ)) {
+							++templateMatches;
+						}
+					}
+					clock_gettime(batchAfter);
+					long processTime = GetTimeDiff(batchAfter, batchBefore);
+
+					// BRIAN write to syllable log file 
+					syllLogFile << "Syllable index = " << pulsesInWindow << ", template matches = " << templateMatches << " out of total templates= " << ntemps
+						<< ", after NI edge sample " << edgeTimes[0]
+						<< ", IM window [" << targStartCt
+						<< ", " << targEndCt << "]" 
+						<< "processesing time = "<< processTime << std::endl;
+					//does this loop break do what i think its doiung??? 
+
+					bool shouldFeedback = params.bThreshMode
+						? (templateMatches >= matchesThreshold)
+						: (templateMatches < matchesThreshold);
+
+					if (shouldFeedback){
+						while (sglxSock->getStreamSampleCt(IMEC,osParams) < FeedbackCt) {
+							std::cout << "waiting for feedback" << std::endl;
+							//keep getting sample count until i pass feedback time 
+						}
+						//now we've passed the required feedback time
+						sglxSock->setDigitalOut(0);//fxn autosets line hi->lo
+						NI_processedCT = NI_latestCt;// sglxSock->getStreamSampleCt(NIDQ, osParams);
+						OnlineSpikesPayload payload = { recordingOffset,
+										IM_latestCt,
+										times,
+										templates,
+										amplitudes,
+										rootMeanSquared,
+										p2p,
+										processTime
+						};
+
+						sendPayload(&imecFm, payload, decoderImecAddr);
+
+						recentEdges.clear();
 				
-			}
-			else {
-				//failed template 
-				recentEdges.clear();
-				NI_processedCT = NI_latestCt;//sglxSock->getStreamSampleCt(NIDQ, osParams);
-				// Debug
-			}
-		//writeSpikesToFile_syllable(times, templates, amplitudes, syllLogFile);
-		times.clear();
-		templates.clear();
-		amplitudes.clear();
+					}
+				//writeSpikesToFile_syllable(times, templates, amplitudes, syllLogFile);
+				times.clear();
+				templates.clear();
+				amplitudes.clear();
 
+				}
+			}
 		}
-		else {
-		NI_processedCT = NI_latestCt;//sglxSock->getStreamSampleCt(NIDQ, osParams); // BRIAN CHANGED
-		}
+
 	}
-
+	
 }
 
 void OnlineSpikesV2::runSpikeSorting()	

@@ -125,11 +125,11 @@ InputGUI::InputGUI(InputParameters cmdLineParams)
 	Params.fDelay1 = 150.0;
 	Params.fDelay2 = 160.0;
 	Params.fDelay3 = 170.0;
-	Params.usTemplateIdx = { 1, 2 };
+	Params.usTemplateIdx = { };
 	Params.sTemplateIdx = "1 2";
 	Params.iThresh = 20;
 	Params.bThreshMode = false;
-	Params.vSylNum = { 1, 2 };
+	Params.vSylNum = { };
 	Params.sSylNum = "1 2";
 	Params.bFeedbackMode = false;
 	Params.iDigLineIdx = 4;
