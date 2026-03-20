@@ -737,7 +737,6 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 		NI_latestCt = sglxSock->fetchNidqLatest(NI_buff, osParams, NI_processedCT);
 
 		NI_nFetched = NI_latestCt - NI_processedCT;
-		//std::cout << "num NI Fetched = " << NI_nFetched << std::endl; 
 
 		countNidqRisingEdgesInBuffer(NI_buff, NI_processedCT, NI_nFetched, prevHigh, edgeCount, edgeTimes);//KS- this buffer is the only digital bit i care about
 		
@@ -748,11 +747,9 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 		if (recentEdges.size() > 0) {
 			
 			if (NI_latestCt - recentEdges.back() > 50) {// now ready to label a syllable 
-				std::cout << "time delta for loop = " << NI_latestCt - recentEdges.back() << std::endl; 
 				pulsesInWindow = recentEdges.size();
 				recentEdges.clear();
 				//pulses in window = syllable ID 
-				std::cout << "syll # =  " << pulsesInWindow << std::endl;
 				if (std::find(targetPulseCounts.begin(),
 					targetPulseCounts.end(),
 					pulsesInWindow) != targetPulseCounts.end()) 
@@ -836,13 +833,10 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 					}
 
 					// Save the spikes into times, templates, amplitudes
-					int kms = templates.size();
-					std::cout << "pre saveSpikes templates.size()= " <<  kms << std::endl;
-					std::cout<< "and numSpikes = " << numSpikes << std::endl;
+					
 					saveSpikes(numSpikes, targStartCt, IM_latestCt, times, templates, amplitudes);
 			
 					int ntemps = templates.size();
-					std::cout << "post saveSpikes templates.size()= " << ntemps << std::endl;
 
 					//Timer timer("cpu to gpu");
 					int templateMatches = 0;
@@ -867,11 +861,11 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 						: (templateMatches < matchesThreshold);
 
 					if (shouldFeedback){
-						while (sglxSock->getStreamSampleCt(IMEC,osParams) < FeedbackCt) {
-							std::cout << "waiting for feedback" << std::endl;
+						//while (sglxSock->getStreamSampleCt(IMEC,osParams) < FeedbackCt) {
+						//	std::cout << "waiting for feedback" << std::endl;
 							//keep getting sample count until i pass feedback time 
-						}
-						//now we've passed the required feedback time
+						//}
+						//doing feedback ASAP
 						sglxSock->setDigitalOut(0);//fxn autosets line hi->lo
 						NI_processedCT = NI_latestCt;// sglxSock->getStreamSampleCt(NIDQ, osParams);
 						OnlineSpikesPayload payload = { recordingOffset,
@@ -889,6 +883,7 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 						recentEdges.clear();
 				
 					}
+				writeSpikesToFile(times, templates, amplitudes);
 				//writeSpikesToFile_syllable(times, templates, amplitudes, syllLogFile);
 				times.clear();
 				templates.clear();

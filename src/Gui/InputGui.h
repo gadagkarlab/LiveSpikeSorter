@@ -8,12 +8,13 @@
 
 // TODO: REMOVE THIS DEPENDENECY, because weird stuff happens when I try to... everything crashes and nothing runs
 // when I change this to something else, and this weird folder will show up as the default for one of the inputs
-#define _FILE_PATH "D:\\"
+//"D:
+#define _FILE_PATH "D:\\Rose62_d1_night_g0\\"
 //"C:\\SGL_DATA\\01_27_p1_templategeneration_g0\\01_27_p1_templategeneration_g0_imec0\\"
-#define _FOLDER "Lime59_d1_train\\"
+#define _FOLDER "Rose62_d1_night_g0_imec0\\"
+//"Lime59_d1_train\\"
 //#define _FILE_PATH "Z:\GadagkarLab\Keshav\Code\livespikesorter\data"
 //#define _FOLDER "Lime59_d1_train\\"
-
 class InputGUI {
 private:
 	// InputGUI parameters

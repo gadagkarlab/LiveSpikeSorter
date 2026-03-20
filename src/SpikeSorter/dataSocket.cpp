@@ -270,7 +270,7 @@ t_ull StreamDataSocket::fetchEventInfo(int &eventLabel, t_ull lStartCt, OSSSpeci
 void StreamDataSocket::setDigitalOut(int signal) {
 		//Sleep(1);
 		sglx_setDigitalOut(S, 1, "PXI1Slot4/port0/line5");//dig line is hardcoded here 
-		Sleep(2);
+		Sleep(1);
 		sglx_setDigitalOut(S, 0, "PXI1Slot4/port0/line5");
 
 	}

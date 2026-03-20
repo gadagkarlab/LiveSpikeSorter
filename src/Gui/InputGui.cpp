@@ -26,12 +26,12 @@ InputGUI::InputGUI(InputParameters cmdLineParams)
 	/* -------- single‑value fields -------- */
 	Params.sInputFolder =
 		cmdLineParams.sInputFolder.empty()
-		? std::string(_FILE_PATH) + _FOLDER "input\\"
+		? std::string(_FILE_PATH) + _FOLDER "oss_input\\" // KS changed 
 		: cmdLineParams.sInputFolder;
 
 	Params.sImecFile =
 		cmdLineParams.sImecFile.empty()
-		? std::string(_FILE_PATH) + _FOLDER "input\\data.bin"
+		? std::string(_FILE_PATH) + _FOLDER "oss_input\\data.bin"
 		: cmdLineParams.sImecFile;
 
 	Params.sNidqFile =
@@ -90,7 +90,7 @@ InputGUI::InputGUI(InputParameters cmdLineParams)
 
 	// TODO: remove the marked entries from InputParameters and remove any dependencies on them
 	/* -------- fixed defaults -------- */
-	Params.sDataAccquisitionHost = _LOCAL_HOST;
+	Params.sDataAccquisitionHost = "129.236.163.59"; //KS modified 
 	Params.uDataAccquisitionPort = 4142;
 	Params.fImecSamplingRate = 30000.f;
 	Params.fNidqSamplingRate = 25000.f;
@@ -558,5 +558,11 @@ void InputGUI::writeParamFile() {
 	ParamFile << "OSS Output Folder, " << Params.sOSSOutputFolder << std::endl;
 	ParamFile << "Syllable Number List, " << Params.sSylNum << std::endl;
 	ParamFile << "Template Index List, " << Params.sTemplateIdx << std::endl;
+	//ks added below
+	ParamFile << "Delay 1, " << Params.fDelay1 << std::endl;
+	ParamFile << "Delay 2, " << Params.fDelay2 << std::endl;
+	ParamFile << "Delay 3, " << Params.fDelay3 << std::endl;
+	ParamFile << "Threshold mode, " << Params.bThreshMode << std::endl;
+	ParamFile << "Threshold spikes, " << Params.dThreshold << std::endl;
 	ParamFile.close();
 }
