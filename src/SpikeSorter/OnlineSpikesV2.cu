@@ -681,8 +681,8 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 	std::vector<t_ull> edgeTimes
 		;
 	std::deque<t_ull> recentEdges;
-	float NIsamplingRate = 39999.8;
-	float IMsamplingRate = 29999.8;
+	float NIsamplingRate = 39999.2;
+	float IMsamplingRate = 30000.0;
 
 	t_ull pulseWindowSamples = static_cast<t_ull>(params.fPulseWindow * NIsamplingRate);  //KS- 3 ms window to check for pulses, placeholder val realistically i think itll be 1ms
 
@@ -729,23 +729,34 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 	NI_latestCt = sglxSock->getStreamSampleCt(NIDQ, osParams);
 	NI_processedCT = NI_latestCt;
 
-	std::cout << "starting fetching!" << std::endl;
+	//std::cout << "starting fetching!" << std::endl;
 
 	while (true) {
+		//std::cout << "top of loop" << std::endl;
 		//assuming i never fall behind the NIstream 
 		NI_processedCT = NI_latestCt; // BRIAN CHANGED AGAIN
+		//std::cout << "new proc CT is = " << NI_processedCT << std::endl;
+
 		NI_latestCt = sglxSock->fetchNidqLatest(NI_buff, osParams, NI_processedCT);
+		//std::cout << "NI latest CT is = " << NI_latestCt << std::endl;
 
 		NI_nFetched = NI_latestCt - NI_processedCT;
+		if (NI_nFetched > 1500) {
+			NI_nFetched = 1400;
+		}
+
+		//std::cout << "ni NFETCHED = "<<  NI_nFetched << std::endl;
 
 		countNidqRisingEdgesInBuffer(NI_buff, NI_processedCT, NI_nFetched, prevHigh, edgeCount, edgeTimes);//KS- this buffer is the only digital bit i care about
 		
-		//pulsesInWindow = edgeTimes.size();
+		//std::cout << "just fetching NI  " << std::endl;
+
 		for (t_ull edget : edgeTimes) {
 			recentEdges.push_back(edget);
 		}
 		if (recentEdges.size() > 0) {
-			
+			syllImCt = sglxSock->getStreamSampleCt(IMEC, osParams);
+
 			if (NI_latestCt - recentEdges.back() > 50) {// now ready to label a syllable 
 				pulsesInWindow = recentEdges.size();
 				recentEdges.clear();
@@ -754,13 +765,10 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 					targetPulseCounts.end(),
 					pulsesInWindow) != targetPulseCounts.end()) 
 					{
-
-					syllImCt = sglxSock->getStreamSampleCt(IMEC,osParams);// now in a syllable i want to get ready for sorting 
-			
+					// now in a syllable i want to get ready for sorting 
 					targStartCt = syllImCt + (delay1_ms * IMsamplingRate / 1000) - 40;// sample indices i want to sort 
-					targEndCt = syllImCt + (delay2_ms * IMsamplingRate / 1000) + 40;			
-					FeedbackCt = syllImCt + (delay3_ms * IMsamplingRate / 1000);
-					sglxSock->waitUntil(targEndCt + 40, osParams); // rough wait until samples should b ready, is there any better way to do it? 
+					targEndCt = syllImCt + (delay2_ms * IMsamplingRate / 1000);			
+					sglxSock->waitUntil(targEndCt, osParams); // rough wait until samples should b ready, is there any better way to do it? 
 			
 					clock_gettime(batchBefore);
 					//IM_latestCt = sglxSock->fetchLatest(fetchBuf, osParams, targStartCt);
@@ -800,20 +808,20 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 						Timer timer("medianRemove()");
 						medianRemove(d_fetchBuf, C, currBatchNumSamples);
 					}
-					_CUDA_CALL(cudaDeviceSynchronize());
+					//_CUDA_CALL(cudaDeviceSynchronize());
 					// Perform a high-pass filter at 300 hz assuming the signal is at 30000 hz
 					{
 						Timer timer("highpassFilter()");
 						transpose(d_fetchBuf, d_fetchBuf2, currBatchNumSamples, C);
 						highpassFilter(d_fetchBuf2, C, currBatchNumSamples, 30000, 300);
 					}
-					_CUDA_CALL(cudaDeviceSynchronize());
+					//_CUDA_CALL(cudaDeviceSynchronize());
 					// Whiten the batch on device (THIS WORKS FOR SURE, DO NOT TOUCH OR WORRY ABOUT IT)
 					{
 						Timer timer("whitening()");
 						matMul(cublasHandle, d_whitening, d_fetchBuf2, d_fetchBuf, C, C, currBatchNumSamples);
 					}
-					_CUDA_CALL(cudaDeviceSynchronize());
+					//_CUDA_CALL(cudaDeviceSynchronize());
 					// Drift correct
 					{	//KS im also worried about doing this drift from my morning recording is likely to be much worse than later in the day.
 						Timer timer("driftCorrection()");
@@ -834,10 +842,8 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 
 					// Save the spikes into times, templates, amplitudes
 					
-					saveSpikes(numSpikes, targStartCt, IM_latestCt, times, templates, amplitudes);
-			
-					int ntemps = templates.size();
-
+					
+		
 					//Timer timer("cpu to gpu");
 					int templateMatches = 0;
 					for (int templ : templates) {
@@ -848,14 +854,7 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 					clock_gettime(batchAfter);
 					long processTime = GetTimeDiff(batchAfter, batchBefore);
 
-					// BRIAN write to syllable log file 
-					syllLogFile << "Syllable index = " << pulsesInWindow << ", template matches = " << templateMatches << " out of total templates= " << ntemps
-						<< ", after NI edge sample " << edgeTimes[0]
-						<< ", IM window [" << targStartCt
-						<< ", " << targEndCt << "]" 
-						<< "processesing time = "<< processTime << std::endl;
-					//does this loop break do what i think its doiung??? 
-
+					
 					bool shouldFeedback = params.bThreshMode
 						? (templateMatches >= matchesThreshold)
 						: (templateMatches < matchesThreshold);
@@ -867,7 +866,13 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 						//}
 						//doing feedback ASAP
 						sglxSock->setDigitalOut(0);//fxn autosets line hi->lo
-						NI_processedCT = NI_latestCt;// sglxSock->getStreamSampleCt(NIDQ, osParams);
+						// BRIAN write to syllable log file 
+						syllLogFile << "Syllable index = " << pulsesInWindow << ", template matches = " << templateMatches 
+							<< ", after NI edge sample " << edgeTimes[0]
+							<< ", IM window [" << targStartCt
+							<< ", " << targEndCt << "]"
+							<< "processesing time = " << processTime << std::endl; 
+						saveSpikes(numSpikes, targStartCt, IM_latestCt, times, templates, amplitudes);
 						OnlineSpikesPayload payload = { recordingOffset,
 										IM_latestCt,
 										times,
@@ -875,13 +880,10 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 										amplitudes,
 										rootMeanSquared,
 										p2p,
-										processTime
-						};
-
+										processTime};
 						sendPayload(&imecFm, payload, decoderImecAddr);
-
 						recentEdges.clear();
-				
+						NI_processedCT = sglxSock->getStreamSampleCt(NIDQ, osParams);
 					}
 				writeSpikesToFile(times, templates, amplitudes);
 				//writeSpikesToFile_syllable(times, templates, amplitudes, syllLogFile);
@@ -894,7 +896,8 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 		}
 
 	}
-	
+
+	std::cout << "ive left the while loop" << std::endl;
 }
 
 void OnlineSpikesV2::runSpikeSorting()	
@@ -1156,7 +1159,7 @@ long OnlineSpikesV2::kilosortMatchingPursuit(float* d_batch, long currBatchNumSa
 	{
 		Timer timer("crossCorrelation()");
 		crossCorrelation(d_Wall3, d_batchPCA, d_convResult, unclu_T, K, C, currBatchNumSamples);
-		_CUDA_CALL(cudaDeviceSynchronize());
+		//_CUDA_CALL(cudaDeviceSynchronize());
 	}
 
 	// --- Perform OMP on the batch with neuron templates as the OMP templates
@@ -1171,7 +1174,7 @@ long OnlineSpikesV2::kilosortMatchingPursuit(float* d_batch, long currBatchNumSa
 		{
 			Timer timer("normalizeConvolution");
 			normalizeConv(d_convResult, d_nm, d_convNormalized, unclu_T, currBatchNumSamples, M);
-			_CUDA_CALL(cudaDeviceSynchronize());
+			//_CUDA_CALL(cudaDeviceSynchronize());
 		}
 
 		// Collapse channel dimension, i.e. result will be array of length = # samples.
@@ -1179,7 +1182,7 @@ long OnlineSpikesV2::kilosortMatchingPursuit(float* d_batch, long currBatchNumSa
 		{
 			Timer timer("collapseWithMax");
 			reduceToTimeDimByMax(d_convNormalized, d_maxAtTime, d_imax, unclu_T, currBatchNumSamples);
-			_CUDA_CALL(cudaDeviceSynchronize());
+			//_CUDA_CALL(cudaDeviceSynchronize());
 		}
 
 		// Pool together the result of above to find local maxima (across time, of window size M)

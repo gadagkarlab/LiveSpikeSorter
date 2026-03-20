@@ -197,27 +197,16 @@ t_ull StreamDataSocket::initNidqStream() {
 //KS made based on StreamDataSocket::fetchLatest
 t_ull StreamDataSocket::fetchNidqLatest(float *fData_NI, OSSSpecificParams osParams, t_ull lStartCt, int m_nMaxSize, int m_nMinSize) {
 	//just copied from fetchLatest need to figure out how to get the right bit for my digline. this assumes i will never fall behind 
-
 	t_ull lLatestCt = getStreamSampleCt(NIDQ, osParams);
-
 	t_ull lToGet = lLatestCt - lStartCt;
 	if (lStartCt == ULLONG_MAX) {
 		lToGet = m_nMinSize;
 	}
-
 	if (lToGet > m_nMaxSize) {
 		lToGet = m_nMaxSize;
 	}
-
 	lStartCt = lLatestCt - lToGet;
-
-
 	lLatestCt = fetch(m_sNidqBuffer, S, NIDQ, 0, lStartCt, lToGet, m_vNidqChannels);// hard code in digital params 
-
-	// BRIAN
-//	for (int i = 0; i < lToGet; i++)
-//		std::cout << m_sNidqBuffer[i] << ' ';
-//	std::cout << std::endl;
 
 	constexpr int bitIdx = 2;// hardcoded line i expect my syll code to come on 
 	//Fill fData with m_sNidqBuffer's contents after selecting my digital word buffer should b ok 
@@ -228,6 +217,9 @@ t_ull StreamDataSocket::fetchNidqLatest(float *fData_NI, OSSSpecificParams osPar
 	}
 	return lLatestCt;
 }
+
+
+
 
 // fetch the NIDQ data and extract stimulus event time and label (if they exist)
 t_ull StreamDataSocket::fetchEventInfo(int &eventLabel, t_ull lStartCt, OSSSpecificParams osParams) {
