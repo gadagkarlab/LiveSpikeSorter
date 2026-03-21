@@ -3,7 +3,7 @@
 
 #include "../Networking/inputParameters.h"
 
-#define _LOCAL_HOST "129.236.161.150" // modified this to defauly when i rebuild 
+#define _LOCAL_HOST "127.0.0.1" // modified this to defauly when i rebuild 
 #define _DEFAULT_MASTER_PORT 8888
 
 // TODO: REMOVE THIS DEPENDENECY, because weird stuff happens when I try to... everything crashes and nothing runs

@@ -73,7 +73,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN64;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\Users\kesha\anaconda3\envs\onlinespikes\Lib\site-packages\numpy\core\include;C:\Users\kesha\anaconda3\envs\onlinespikes\include;C:\Users\kesha\OneDrive\Desktop\LiveSpikeSorter\mlpack\armadillo-15.2.3\include;C:\Users\kesha\OneDrive\Desktop\LiveSpikeSorter\mlpack\mlpack-4.7.0\src;C:\Users\kesha\OneDrive\Desktop\LiveSpikeSorter\mlpack\ensmallen-3.11.0\include;C:\Users\kesha\OneDrive\Desktop\LiveSpikeSorter\mlpack\cereal-1.3.2\include;C:\Users\kesha\OneDrive\Desktop\LiveSpikeSorter\External;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\ksnpx\anaconda3\envs\onlinespikes\Lib\site-packages\numpy\core\include;C:\Users\ksnpx\anaconda3\envs\onlinespikes\include;C:\Users\ksnpx\Desktop\LiveSpikeSorter\mlpack\armadillo-15.2.3\include;C:\Users\ksnpx\Desktop\LiveSpikeSorter\mlpack\mlpack-4.7.0\src;C:\Users\ksnpx\Desktop\LiveSpikeSorter\mlpack\ensmallen-3.11.0\include;C:\Users\ksnpx\Desktop\LiveSpikeSorter\mlpack\cereal-1.3.2\include;C:\Users\ksnpx\Desktop\LiveSpikeSorter\External;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <ShowIncludes>false</ShowIncludes>
@@ -82,7 +82,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
       <AdditionalDependencies>cublas.lib;cudnn.lib;ws2_32.lib;npps.lib;d3d12.lib;dxgi.lib;libSglxApi.a;cusolver.lib;cudart.lib;cufft.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\Users\kesha\anaconda3\envs\onlinespikes\libs;C:\Users\kesha\OneDrive\Desktop\LiveSpikeSorter\External\sglx;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\Users\ksnpx\anaconda3\envs\onlinespikes\libs;C:\Users\ksnpx\Desktop\LiveSpikeSorter\External\sglx;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <UACExecutionLevel>HighestAvailable</UACExecutionLevel>
     </Link>
     <PostBuildEvent>
@@ -97,7 +97,7 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>WIN64;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\Users\kesha\OneDrive\Desktop\LiveSpikeSorter_KS_31926\External;C:\Users\kesha\OneDrive\Desktop\LiveSpikeSorter_KS_31926\mlpack\cereal-1.3.2\include;C:\Users\kesha\OneDrive\Desktop\LiveSpikeSorter_KS_31926\mlpack\ensmallen-3.11.0\include;C:\Users\kesha\OneDrive\Desktop\LiveSpikeSorter_KS_31926\mlpack\mlpack-4.7.0\src;C:\Users\kesha\OneDrive\Desktop\LiveSpikeSorter_KS_31926\mlpack\armadillo-15.2.3\include;C:\Users\kesha\anaconda3\envs\onlinespikes\include;C:\Users\kesha\anaconda3\envs\onlinespikes\Lib\site-packages\numpy\core\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\ksnpx\Desktop\LiveSpikeSorter_KS_31926\External;C:\Users\ksnpx\Desktop\LiveSpikeSorter_KS_31926\mlpack\cereal-1.3.2\include;C:\Users\ksnpx\Desktop\LiveSpikeSorter_KS_31926\mlpack\ensmallen-3.11.0\include;C:\Users\ksnpx\Desktop\LiveSpikeSorter_KS_31926\mlpack\mlpack-4.7.0\src;C:\Users\ksnpx\Desktop\LiveSpikeSorter_KS_31926\mlpack\armadillo-15.2.3\include;C:\Users\ksnpx\anaconda3\envs\onlinespikes\include;C:\Users\ksnpx\anaconda3\envs\onlinespikes\Lib\site-packages\numpy\core\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <ShowIncludes>false</ShowIncludes>
@@ -116,7 +116,7 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
       <GenerateDebugInformation>false</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
       <AdditionalDependencies>cublas.lib;cudnn.lib;ws2_32.lib;npps.lib;d3d12.lib;dxgi.lib;libSglxApi.a;cusolver.lib;cudart.lib;cufft.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\Users\kesha\anaconda3\envs\onlinespikes\libs;C:\Users\kesha\OneDrive\Desktop\LiveSpikeSorter_KS_31926\External\sglx;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\Users\ksnpx\anaconda3\envs\onlinespikes\libs;C:\Users\ksnpx\Desktop\LiveSpikeSorter_KS_31926\External\sglx;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <UACExecutionLevel>HighestAvailable</UACExecutionLevel>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>

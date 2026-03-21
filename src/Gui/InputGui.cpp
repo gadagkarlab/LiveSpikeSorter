@@ -90,7 +90,7 @@ InputGUI::InputGUI(InputParameters cmdLineParams)
 
 	// TODO: remove the marked entries from InputParameters and remove any dependencies on them
 	/* -------- fixed defaults -------- */
-	Params.sDataAccquisitionHost = "129.236.163.59"; //KS modified 
+	Params.sDataAccquisitionHost = _LOCAL_HOST; //KS modified 
 	Params.uDataAccquisitionPort = 4142;
 	Params.fImecSamplingRate = 30000.f;
 	Params.fNidqSamplingRate = 25000.f;
@@ -563,6 +563,6 @@ void InputGUI::writeParamFile() {
 	ParamFile << "Delay 2, " << Params.fDelay2 << std::endl;
 	ParamFile << "Delay 3, " << Params.fDelay3 << std::endl;
 	ParamFile << "Threshold mode, " << Params.bThreshMode << std::endl;
-	ParamFile << "Threshold spikes, " << Params.dThreshold << std::endl;
+	ParamFile << "Threshold spikes, " << Params.iThresh << std::endl;
 	ParamFile.close();
 }

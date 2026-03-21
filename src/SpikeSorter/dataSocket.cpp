@@ -149,7 +149,7 @@ t_ull StreamDataSocket::fetchLatest_TC(float *fData, OSSSpecificParams osParams,
 	//std::cout << "number of samples: " << lToGet << std::endl;
 	//std::cout << "number of channels: " << m_lNChans << std::endl;
 
-	return lLatestCt, lToGet;
+	return lLatestCt;
 }
 
 // fetchFromPlace: lStreamSampleCt (the start of the fetch) is constant
@@ -186,7 +186,7 @@ t_ull StreamDataSocket::initNidqStream() {
 	/* Wait some time before starting NIDQ stream fetching to avoid SpikeGLX errors.
 	If you are receiving "[FETCH: Too late.]" error messages from
 	the fetchEventInfo call, increase the time waited. */
-	Sleep(1000); // TODO explore how low this value can go.
+	Sleep(10); // TODO explore how low this value can go.
 	//commented out for invalid argument
 	//t_ull lLatestSampleCt = getStreamSampleCt(NIDQ);
 	//re
@@ -198,6 +198,8 @@ t_ull StreamDataSocket::initNidqStream() {
 t_ull StreamDataSocket::fetchNidqLatest(float *fData_NI, OSSSpecificParams osParams, t_ull lStartCt, int m_nMaxSize, int m_nMinSize) {
 	//just copied from fetchLatest need to figure out how to get the right bit for my digline. this assumes i will never fall behind 
 	t_ull lLatestCt = getStreamSampleCt(NIDQ, osParams);
+	
+	
 	t_ull lToGet = lLatestCt - lStartCt;
 	if (lStartCt == ULLONG_MAX) {
 		lToGet = m_nMinSize;
@@ -260,12 +262,22 @@ t_ull StreamDataSocket::fetchEventInfo(int &eventLabel, t_ull lStartCt, OSSSpeci
 
 //KS needs to check the lines I use and make sure it works. this uses a much older form of the API and im moderately concerened neweer SGLx wont support it
 void StreamDataSocket::setDigitalOut(int signal) {
-		//Sleep(1);
-		sglx_setDigitalOut(S, 1, "PXI1Slot4/port0/line5");//dig line is hardcoded here 
-		Sleep(1);
-		sglx_setDigitalOut(S, 0, "PXI1Slot4/port0/line5");
 
+	constexpr const char* LINE5 = "PXI1Slot4_2/port0/line5";
+	constexpr const char* LINE7 = "PXI1Slot4_2/port0/line7";
+
+	if (signal == 0) {
+		//Sleep(1);
+		sglx_setDigitalOut(S, 1, LINE5);//dig line is hardcoded here 
+		Sleep(1);
+		sglx_setDigitalOut(S, 0, LINE5);
 	}
+	if (signal == 1) {
+		sglx_setDigitalOut(S, 1, LINE7);//dig line is hardcoded here 
+		Sleep(1);
+		sglx_setDigitalOut(S, 0, LINE7);
+	}
+}
 //	else
 //	{
 //		sglx_setDigitalOut(S, 0, "PXI1Slot4/port0/line5");
