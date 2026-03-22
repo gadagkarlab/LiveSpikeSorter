@@ -681,22 +681,12 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 	std::vector<t_ull> edgeTimes
 		;
 	std::deque<t_ull> recentEdges;
-	float NIsamplingRate = 39999.2;
-	float IMsamplingRate = 30000.0;
-
-	t_ull offset_1 = (delay1_ms * IMsamplingRate / 1000.0) - 40.0; 
-	t_ull offset_2 = (delay2_ms * IMsamplingRate / 1000.0) + 40.0;
-	t_ull offset_3 = (delay3_ms * IMsamplingRate / 1000.0);
-
-
-	t_ull pulseWindowSamples = static_cast<t_ull>(params.fPulseWindow * NIsamplingRate);  //KS- 3 ms window to check for pulses, placeholder val realistically i think itll be 1ms
 
 	t_ull NI_processedCT,
 		NI_nFetched,
 		IM_processedCT,
 		NI_latestCt,
 		IM_latestCt,
-		syllImCt,
 		targStartCt,
 		targEndCt,
 		targFeedbackCt;
@@ -731,57 +721,65 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 
 	// open NI Stream 
 	sglxSock->initNidqStream();
+
+
+	float NIsamplingRate = sglxSock->getStreamSampleRate(NIDQ, osParams);
+	float IMsamplingRate = sglxSock->getStreamSampleRate(IMEC, osParams);
+
+	t_ull offset_1 = (delay1_ms * IMsamplingRate / 1000.0) ;
+	t_ull offset_2 = (delay2_ms * IMsamplingRate / 1000.0) ;
+	t_ull offset_3 = (delay3_ms * IMsamplingRate / 1000.0);
+	//t_ull imCorrectSyll = 11 * IMsamplingRate / 1000.0; 
+	std::cout << "offset 1= " << offset_1 << "offset2= " << offset_2 << "offset3 =" << offset_3 << std::endl;
+	
+	t_ull currImTime,
+		firstNiEdge,
+		elapsedIMtime,
+		syllImCt;
+
+
+	//std::cout << "starting fetching!" << std::endl;
 	NI_latestCt = sglxSock->getStreamSampleCt(NIDQ, osParams);
 	NI_processedCT = NI_latestCt;
 
-	//std::cout << "starting fetching!" << std::endl;
-
 	while (true) {
-		//std::cout << "top of loop" << std::endl;
-		//assuming i never fall behind the NIstream 
-		NI_processedCT = NI_latestCt; // BRIAN CHANGED AGAIN
-		//std::cout << "new proc CT is = " << NI_processedCT << std::endl;
-
-		NI_latestCt = sglxSock->fetchNidqLatest(NI_buff, osParams, NI_processedCT);
-		//std::cout << "NI latest CT is = " << NI_latestCt << std::endl;
-
-		NI_nFetched = NI_latestCt - NI_processedCT;
-		if (NI_nFetched > 1500) {
-			NI_nFetched = 1500;
-		}
-
-		//std::cout << "ni NFETCHED = "<<  NI_nFetched << std::endl;
-
-		countNidqRisingEdgesInBuffer(NI_buff, NI_processedCT, NI_nFetched, prevHigh, edgeCount, edgeTimes);//KS- this buffer is the only digital bit i care about
+		sglxSock->waituntilNI(NI_latestCt + 5, NIsamplingRate, osParams);
+		NI_processedCT = NI_latestCt;
 		
-		//std::cout << "just fetching NI  " << std::endl;
-
+		//std::cout << "done waiting " << std::endl;
+		currImTime = sglxSock->getStreamSampleCt(IMEC, osParams);
+		NI_latestCt = sglxSock->fetchNidqLatestAndCountEdges(osParams, NI_processedCT, prevHigh, edgeCount, edgeTimes); // KS added ADD MIN WINDOW FOR NI!!!!!!!!!
+		
+		
 		for (t_ull edget : edgeTimes) {
 			recentEdges.push_back(edget);
 		}
 		if (recentEdges.size() > 0) {
-
-			if (NI_latestCt - recentEdges.back() > 50) {// now ready to label a syllable 
+			if (NI_latestCt - recentEdges.back() > 60) {// now ready to label a syllable 
 				pulsesInWindow = recentEdges.size();
-				t_ull lastedgeTime = recentEdges.back();
+				firstNiEdge = recentEdges.front();
 				recentEdges.clear();
 				//pulses in window = syllable ID 
 				if (std::find(targetPulseCounts.begin(),
 					targetPulseCounts.end(),
 					pulsesInWindow) != targetPulseCounts.end()) 
 					{
-					syllImCt = sglxSock->getStreamSampleCt(IMEC, osParams);
+					elapsedIMtime = IMsamplingRate * (NI_latestCt - firstNiEdge) / NIsamplingRate;
+					std::cout << "elapsedIM time = " << elapsedIMtime << std::endl;
+
+					syllImCt =  currImTime - elapsedIMtime; //theres always like a 10-12ms delay to get here from the NI time dont ask me why i hate this 
 					// now in a syllable i want to get ready for sorting 
+
 					targStartCt = syllImCt + offset_1;// sample indices i want to sort 
-					targEndCt = syllImCt + offset_2;
+					targEndCt = syllImCt + offset_2;	
 					targFeedbackCt = syllImCt + offset_3;
-					sglxSock->waitUntil(targEndCt, osParams); // rough wait until samples should b ready, is there any better way to do it? 
+					
+
+					sglxSock->waitUntilIMEC(targEndCt,IMsamplingRate, osParams); // rough wait until samples should b ready, is there any better way to do it? 
 			
 					clock_gettime(batchBefore);
-					
-					//IM_latestCt = sglxSock->fetchLatest(fetchBuf, osParams, targStartCt);
-					sglxSock->setDigitalOut(1);// pulse when fetch
-					IM_latestCt = sglxSock->fetchImecExact(fetchBuf, osParams, targStartCt, targEndCt);
+
+					IM_latestCt = sglxSock->fetchImecExact(fetchBuf, osParams, targStartCt, targEndCt); 
 					currBatchNumSamples = IM_latestCt- targStartCt; 
 					
 					//std::cout << 
@@ -823,7 +821,7 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 					{
 						Timer timer("highpassFilter()");
 						transpose(d_fetchBuf, d_fetchBuf2, currBatchNumSamples, C);
-						highpassFilter(d_fetchBuf2, C, currBatchNumSamples, 30000, 300);
+						highpassFilter(d_fetchBuf2, C, currBatchNumSamples, IMsamplingRate, 300);
 					}
 					_CUDA_CALL(cudaDeviceSynchronize());
 					// Whiten the batch on device (THIS WORKS FOR SURE, DO NOT TOUCH OR WORRY ABOUT IT)
@@ -840,7 +838,7 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 					_CUDA_CALL(cudaDeviceSynchronize());
 					// Perform OMP
 					numSpikes = kilosortMatchingPursuit(d_fetchBuf2, currBatchNumSamples);
-					std::cout << "currBatch Samples= " << currBatchNumSamples << " and had numSpikes= " << numSpikes << std::endl;
+					//std::cout << "currBatch Samples= " << currBatchNumSamples << " and had numSpikes= " << numSpikes << std::endl;
 
 					// Use results of OMP to assign unmapped spike templates to the closest clusters
 					// - inputs: d_spikeTemplates, d_spikeTimes, d_residual
@@ -876,11 +874,12 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 					// Save the spikes into times, templates, amplitudes
 					
 					writeSpikesToFile(times, templates, amplitudes);
-					syllLogFile << "Syllable index = " << pulsesInWindow << ", template matches = " << templateMatches
-						<< ", after NI edge sample " << lastedgeTime
-						<< ", IM window [" << targStartCt
-						<< ", " << IM_latestCt << "]"
-						<< "processesing time = " << processTime << std::endl;
+					
+					syllLogFile << "Syllable index= " << pulsesInWindow << ", template matches=" << templateMatches
+						<< ",NI last edge sample= " << firstNiEdge << ",IM samp count at syll on= " << syllImCt
+						<< ", IM start= " << targStartCt
+						<< ", IM end=  " << IM_latestCt
+						<< ",processesing time= " << processTime << ",NI samples fetched = "<< NI_latestCt - NI_processedCT << std::endl;
 					OnlineSpikesPayload payload = { recordingOffset,
 									IM_latestCt,
 									times,
@@ -898,7 +897,7 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 				}
 			}	
 		}
-
+		NI_processedCT = NI_latestCt;
 	}
 
 	std::cout << "ive left the while loop" << std::endl;

@@ -79,7 +79,6 @@ void StreamDataSocket::disconnect() {
 	m_mSGlxMutex.unlock();
 }
 
-
 t_ull StreamDataSocket::getStreamSampleCt(int streamType, OSSSpecificParams osParams) {
 	//m_mSGlxMutex.lock();
 	std::unique_lock<std::mutex> lock(sglxMutex);
@@ -87,6 +86,16 @@ t_ull StreamDataSocket::getStreamSampleCt(int streamType, OSSSpecificParams osPa
 	//m_mSGlxMutex.unlock();
 	return sampleCt;
 }
+
+float StreamDataSocket::getStreamSampleRate(int streamType, OSSSpecificParams osParams) {
+	//m_mSGlxMutex.lock();
+	std::unique_lock<std::mutex> lock(sglxMutex);
+	float sampleCt = (streamType == IMEC) ? sglx_getStreamSampleRate(S, streamType, osParams.substream) : sglx_getStreamSampleRate(S, streamType, 0);
+	//m_mSGlxMutex.unlock();
+	return sampleCt;
+}
+
+
 
 // sglx_fetch returns the sample count index of first sample in matrix, or zero if error. StreamDataSocket::fetch, however,
 // returns the sample count index of the last sample in matrix.
@@ -186,7 +195,7 @@ t_ull StreamDataSocket::initNidqStream() {
 	/* Wait some time before starting NIDQ stream fetching to avoid SpikeGLX errors.
 	If you are receiving "[FETCH: Too late.]" error messages from
 	the fetchEventInfo call, increase the time waited. */
-	Sleep(10); // TODO explore how low this value can go.
+	Sleep(100); // TODO explore how low this value can go.
 	//commented out for invalid argument
 	//t_ull lLatestSampleCt = getStreamSampleCt(NIDQ);
 	//re
@@ -194,11 +203,12 @@ t_ull StreamDataSocket::initNidqStream() {
 }
 
 
+
 //KS made based on StreamDataSocket::fetchLatest
 t_ull StreamDataSocket::fetchNidqLatest(float *fData_NI, OSSSpecificParams osParams, t_ull lStartCt, int m_nMaxSize, int m_nMinSize) {
 	//just copied from fetchLatest need to figure out how to get the right bit for my digline. this assumes i will never fall behind 
-	t_ull lLatestCt = getStreamSampleCt(NIDQ, osParams);
 	
+	t_ull lLatestCt = getStreamSampleCt(NIDQ, osParams);
 	
 	t_ull lToGet = lLatestCt - lStartCt;
 	if (lStartCt == ULLONG_MAX) {
@@ -221,7 +231,41 @@ t_ull StreamDataSocket::fetchNidqLatest(float *fData_NI, OSSSpecificParams osPar
 }
 
 
+t_ull StreamDataSocket::fetchNidqLatestAndCountEdges(OSSSpecificParams osParams, t_ull lStartCt, bool &prevHigh, int &edgeCount, std::vector<t_ull> &edgeTimes, int m_nMaxSize, int m_nMinSize) {
+	
+	constexpr int bitIdx = 2;
 
+	t_ull lLatestCt = getStreamSampleCt(NIDQ, osParams);
+
+	t_ull lToGet = lLatestCt - lStartCt;
+
+	if (lStartCt == ULLONG_MAX) {
+		lToGet = m_nMinSize;
+	}
+	if (lToGet > m_nMaxSize) {
+		lToGet = m_nMaxSize;
+	}
+
+	lStartCt = lLatestCt - lToGet;
+
+	lLatestCt = fetch(m_sNidqBuffer, S, NIDQ, 0, lStartCt, lToGet, m_vNidqChannels);
+
+	edgeCount = 0;
+	edgeTimes.clear();
+	
+	for (t_ull i = 0; i < lToGet; ++i) {
+		bool high = ((m_sNidqBuffer[i] >> bitIdx) & 1) & 1;
+
+		if (!prevHigh && high) {
+			++edgeCount;
+			edgeTimes.push_back(lStartCt + i);
+		}
+
+		prevHigh = high;
+	}
+
+	return lLatestCt;
+}
 
 // fetch the NIDQ data and extract stimulus event time and label (if they exist)
 t_ull StreamDataSocket::fetchEventInfo(int &eventLabel, t_ull lStartCt, OSSSpecificParams osParams) {
@@ -269,22 +313,14 @@ void StreamDataSocket::setDigitalOut(int signal) {
 	if (signal == 0) {
 		//Sleep(1);
 		sglx_setDigitalOut(S, 1, LINE5);//dig line is hardcoded here 
-		Sleep(1);
+		//efficientWait(1);
 		sglx_setDigitalOut(S, 0, LINE5);
 	}
 	if (signal == 1) {
 		sglx_setDigitalOut(S, 1, LINE7);//dig line is hardcoded here 
-		Sleep(1);
+		//efficientWait(1);
 		sglx_setDigitalOut(S, 0, LINE7);
 	}
-}
-//	else
-//	{
-//		sglx_setDigitalOut(S, 0, "PXI1Slot4/port0/line5");
-
-//	}
-
-	// feedbackSignal == 0 signifies setting nidq stream out back to 0
 
 	/*std::string binaryFeedbackSignal = std::bitset<nBits>(signal).to_string();
 	std::cout << binaryFeedbackSignal<<"\n";
@@ -296,6 +332,8 @@ void StreamDataSocket::setDigitalOut(int signal) {
 
 
 	}*/
+
+}
 
 
 
@@ -347,6 +385,24 @@ void StreamDataSocket::waitUntil(t_ull lWaitUntilCt, OSSSpecificParams osParams)
 	t_ull lLatestCt = getStreamSampleCt(IMEC, osParams);
 	if (lLatestCt < lWaitUntilCt) {
 		int iWaitTime = (lWaitUntilCt - lLatestCt) / (m_fImecSampRate / 1000); // ms
+		efficientWait(iWaitTime);
+	}
+}
+
+
+void StreamDataSocket::waitUntilIMEC(t_ull lWaitUntilCt, float ImSampRate, OSSSpecificParams osParams){
+	
+	t_ull lLatestCt = getStreamSampleCt(IMEC, osParams);
+	if (lLatestCt < lWaitUntilCt) {
+		int iWaitTime = (lWaitUntilCt - lLatestCt) / (ImSampRate / 1000); // ms
+		efficientWait(iWaitTime);
+	}
+}
+void StreamDataSocket::waituntilNI(t_ull lWaitUntilCt, float NiSampRate, OSSSpecificParams osParams){
+	
+	t_ull lLatestCt = getStreamSampleCt(NIDQ, osParams);
+	if (lLatestCt < lWaitUntilCt) {
+		int iWaitTime = (lWaitUntilCt - lLatestCt) / (NiSampRate / 1000); // ms
 		efficientWait(iWaitTime);
 	}
 }

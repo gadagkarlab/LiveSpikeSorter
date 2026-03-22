@@ -27,21 +27,26 @@ public:
 	virtual void   disconnect() {};
 
 	virtual t_ull   getStreamSampleCt(int streamType, OSSSpecificParams osParams) = 0;
+	virtual float	getStreamSampleRate(int streamType, OSSSpecificParams osParams) = 0;
 	virtual t_ull   fetchLatest(float *fData, OSSSpecificParams osParams, t_ull lStartCt = ULLONG_MAX) = 0;
 	virtual t_ull	fetchLatest_TC(float *fData, OSSSpecificParams osParams, t_ull lStartCt = ULLONG_MAX) = 0;
 	virtual t_ull   fetchFromPlace(float *fData, OSSSpecificParams osParams, t_ull lStartCt) = 0;
 	virtual t_ull	fetchImecExact(float *fData, OSSSpecificParams osParams, t_ull lStartCt, t_ull lEndCt) = 0; //KS
 
-	virtual t_ull   fetchNidqLatest(float *fData_NI, OSSSpecificParams osParams, t_ull lStartCt = ULLONG_MAX, int m_nMaxSize = 1500, int m_nMinSize = 20) = 0; //KS hard coding these in here asking 0.5 ms @ 40kHz
+	virtual t_ull   fetchNidqLatest(float *fData_NI, OSSSpecificParams osParams, t_ull lStartCt = ULLONG_MAX, int m_nMaxSize = 20000, int m_nMinSize = 20) = 0; //KS hard coding these in here asking 0.5 ms @ 40kHz
 	virtual t_ull	initNidqStream() = 0;
 	virtual t_ull	fetchEventInfo(int &eventLabel, t_ull lStartCt, OSSSpecificParams osParams) = 0;
 	virtual void	setDigitalOut(int signal = 0) {};
+	virtual t_ull	fetchNidqLatestAndCountEdges(OSSSpecificParams osParams, t_ull lStartCt, bool &prevHigh, int &edgeCount, std::vector<t_ull> &edgeTimes, int m_nMaxSize = 240, int m_nMinSize = 40) = 0;
+
 
 	virtual bool   isRunning() { return true; };
 	virtual bool   startRun() { return true; };
 	virtual bool   stopRun() { return true; };
 
 	virtual void   waitUntil(t_ull lCt, OSSSpecificParams osParams) {};
+	virtual void	waitUntilIMEC(t_ull lCt, float ImSampRate,  OSSSpecificParams osParams) {};
+	virtual void	waituntilNI(t_ull lCt, float NiSampRate, OSSSpecificParams osParams) {}; 
 
 protected:
 	// Short vector data buffers
@@ -58,7 +63,7 @@ protected:
 	long		//m_lNChans, // Number of channels in Imec Probe
 		m_lDownsampling; // Downsampling not implemented for FileDataSocket and probably not functional in StreamDataSocket
 
-	float		m_fImecSampRate,
+	float		m_fImecSampRate ,
 		m_fNidqSampRate;
 };
 
@@ -72,6 +77,7 @@ public:
 	void   disconnect();
 
 	t_ull   getStreamSampleCt(int streamType, OSSSpecificParams osParams);
+	float	getStreamSampleRate(int streamType, OSSSpecificParams osParams);
 	t_ull   fetchLatest(float *fData, OSSSpecificParams osParams, t_ull lStartCt = ULLONG_MAX);
 	t_ull	fetchLatest_TC(float *fData, OSSSpecificParams osParams, t_ull lStartCt = ULLONG_MAX);
 	t_ull   fetchFromPlace(float *fData, OSSSpecificParams osParams, t_ull lStartCt);
@@ -79,14 +85,16 @@ public:
 	t_ull   fetchNidqLatest(float *fData, OSSSpecificParams osParams, t_ull lStartCt = ULLONG_MAX, int m_nMaxSize = 1500, int m_nMinSize = 40);// KS fxn
 	t_ull	initNidqStream();
 	t_ull	fetchEventInfo(int &eventLabel, t_ull lStartCt, OSSSpecificParams osParams);
-
+	t_ull	fetchNidqLatestAndCountEdges(OSSSpecificParams osParams, t_ull lStartCt, bool &prevHigh, int &edgeCount, std::vector<t_ull> &edgeTimes, int m_nMaxSize = 240, int m_nMinSize = 40);
 	void	setDigitalOut(int signal = 0);// KS to dbl check 
 
 	bool   isRunning();
 	bool   startRun();
 	bool   stopRun();
 
-	void   waitUntil(t_ull lWaitUntilCt, OSSSpecificParams osParams);
+	void	waitUntil(t_ull lWaitUntilCt, OSSSpecificParams osParams);
+	void	waitUntilIMEC(t_ull lWaitUntilCt, float ImSampRate, OSSSpecificParams osParams);
+	void	waituntilNI(t_ull lWaitUntilCt, float NiSampRate, OSSSpecificParams osParams);
 
 	std::string getHost() { return m_sHost; };
 	uint16      getPort() { return m_uPort; };
