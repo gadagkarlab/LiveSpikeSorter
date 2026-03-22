@@ -726,8 +726,8 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 	float NIsamplingRate = sglxSock->getStreamSampleRate(NIDQ, osParams);
 	float IMsamplingRate = sglxSock->getStreamSampleRate(IMEC, osParams);
 
-	t_ull offset_1 = (delay1_ms * IMsamplingRate / 1000.0) ;
-	t_ull offset_2 = (delay2_ms * IMsamplingRate / 1000.0) ;
+	t_ull offset_1 = (delay1_ms * IMsamplingRate / 1000.0) -40 ;
+	t_ull offset_2 = (delay2_ms * IMsamplingRate / 1000.0) + 40 ;
 	t_ull offset_3 = (delay3_ms * IMsamplingRate / 1000.0);
 	//t_ull imCorrectSyll = 11 * IMsamplingRate / 1000.0; 
 	std::cout << "offset 1= " << offset_1 << "offset2= " << offset_2 << "offset3 =" << offset_3 << std::endl;
@@ -864,7 +864,7 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 						? (templateMatches >= matchesThreshold)
 						: (templateMatches < matchesThreshold);
 					if (shouldFeedback){
-						sglxSock->waitUntilIMEC(targFeedbackCt-45, IMsamplingRate, osParams);// -1.5ms to control a bit for the time it takes to actually send the command 
+						sglxSock->waitUntilIMEC(targFeedbackCt-75, IMsamplingRate, osParams);// -2.5ms to control a bit for the time it takes to actually send the command and read by LV
 						sglxSock->setDigitalOut(0);
 						//while (sglxSock->getStreamSampleCt(IMEC,osParams) < targFeedbackCt) {
 						//	std::cout << "waiting for feedback" << std::endl;
