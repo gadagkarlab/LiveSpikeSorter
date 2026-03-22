@@ -864,11 +864,13 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 						? (templateMatches >= matchesThreshold)
 						: (templateMatches < matchesThreshold);
 					if (shouldFeedback){
-						while (sglxSock->getStreamSampleCt(IMEC,osParams) < targFeedbackCt) {
+						sglxSock->waitUntilIMEC(targFeedbackCt-45, IMsamplingRate, osParams);// -1.5ms to control a bit for the time it takes to actually send the command 
+						sglxSock->setDigitalOut(0);
+						//while (sglxSock->getStreamSampleCt(IMEC,osParams) < targFeedbackCt) {
 						//	std::cout << "waiting for feedback" << std::endl;
 							//keep getting sample count until i pass feedback time 
-						}
-						sglxSock->setDigitalOut(0);//fxn autosets line hi->lo
+						//}
+						//fxn autosets line hi->lo
 					}
 					//KS moved this so i write output every syll regardless of matches 
 					// Save the spikes into times, templates, amplitudes
