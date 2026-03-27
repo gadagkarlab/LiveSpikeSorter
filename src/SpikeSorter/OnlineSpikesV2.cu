@@ -277,7 +277,7 @@ OnlineSpikesV2::OnlineSpikesV2(
 	W(params.iMinScanWindow + params.iMaxScanWindow),
 	rootMeanSquared(0),
 	ossOutputDir(params.sOSSOutputFolder),
-	spikesFileOut(ossOutputDir + "spikeOutput.txt"),
+	spikesFileOut(params.sLogfilesPath + "spikeOutput.txt"),
 	recordingOffset(0),
 	substream(params.iSubstream)
 {
@@ -328,7 +328,7 @@ OnlineSpikesV2::~OnlineSpikesV2()
 
 void OnlineSpikesV2::initializeSorter(InputParameters params) {
 	static const char* ptLabel = { "OnlineSpikesV2::initializeSorter" };
-	std::cout << "Writing spikes to " << ossOutputDir << "spikeOutput.txt" << std::endl;
+	std::cout << "Writing spikes to " << params.sLogfilesPath << "spikeOutput.txt" << std::endl;
 
 	// Set CUDA device to the one that was chosen
 	setDevice(params.uSelectedDevice, &cudnnConvObj);
@@ -664,6 +664,11 @@ void OnlineSpikesV2::countNidqRisingEdgesInBuffer(const float* fetchBuf, t_ull p
 void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 	//std::vector<int> targetPulseCounts, float delay1_ms, float delay2_ms, float delay3_ms, std::unordered_set<int> targetTemplates, int matchesThreshold) {
 	std::vector<int> targetPulseCounts = params.vSylNum;
+
+	// BRIAN threshWindow used if adaptive thresholding
+	std::vector<int> threshWindow;
+	//
+
 	float delay1_ms = params.fDelay1;
 	float delay2_ms = params.fDelay2;
 	float delay3_ms = params.fDelay3;
@@ -704,7 +709,7 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 	struct timespec batchBefore, batchAfter;
 		
 	// file to write syllable/spike log to
-	std::ofstream syllLogFile("syll_log.txt");
+	std::ofstream syllLogFile(params.sLogfilesPath + "syll_log.txt");
 
 	// Vectors to store the spike times, templates, and amplitudes to be sent to the Decoder
 	std::vector<long> times;
@@ -759,13 +764,14 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 				pulsesInWindow = recentEdges.size();
 				firstNiEdge = recentEdges.front();
 				recentEdges.clear();
+				//std::cout << "Syll ID = " << pulsesInWindow << std::endl;
 				//pulses in window = syllable ID 
 				if (std::find(targetPulseCounts.begin(),
 					targetPulseCounts.end(),
 					pulsesInWindow) != targetPulseCounts.end()) 
 					{
 					elapsedIMtime = IMsamplingRate * (NI_latestCt - firstNiEdge) / NIsamplingRate;
-					std::cout << "elapsedIM time = " << elapsedIMtime << std::endl;
+					//std::cout << "elapsedIM time = " << elapsedIMtime << std::endl;
 
 					syllImCt =  currImTime - elapsedIMtime; //theres always like a 10-12ms delay to get here from the NI time dont ask me why i hate this 
 					// now in a syllable i want to get ready for sorting 
@@ -776,16 +782,12 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 					
 
 					sglxSock->waitUntilIMEC(targEndCt,IMsamplingRate, osParams); // rough wait until samples should b ready, is there any better way to do it? 
-			
+					
 					clock_gettime(batchBefore);
 
 					IM_latestCt = sglxSock->fetchImecExact(fetchBuf, osParams, targStartCt, targEndCt); 
 					currBatchNumSamples = IM_latestCt- targStartCt; 
-					
-					//std::cout << 
-					//for (size_t i = 0; i < 100; ++i) {
-					//	std::cout << fetchBuf[i] << " ";
-					//}
+
 					{
 						Timer timer("cpu to gpu");
 						if (skip) {	
@@ -861,17 +863,49 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 
 					
 					bool shouldFeedback = params.bThreshMode
-						? (templateMatches >= matchesThreshold)
-						: (templateMatches < matchesThreshold);
+						? (templateMatches > params.iThresh)// KS updated 
+						: (templateMatches <= params.iThresh);
 					if (shouldFeedback){
-						sglxSock->waitUntilIMEC(targFeedbackCt-75, IMsamplingRate, osParams);// -2.5ms to control a bit for the time it takes to actually send the command and read by LV
-						sglxSock->setDigitalOut(0);
-						//while (sglxSock->getStreamSampleCt(IMEC,osParams) < targFeedbackCt) {
-						//	std::cout << "waiting for feedback" << std::endl;
-							//keep getting sample count until i pass feedback time 
-						//}
-						//fxn autosets line hi->lo
+						if (offset_3 > 0) {
+							sglxSock->waitUntilIMEC(targFeedbackCt-75, IMsamplingRate, osParams);// -2.5ms to control a bit for the time it takes to actually send the command and read by LV
+							}// KS
+							sglxSock->setDigitalOut(0);
 					}
+
+					// BRIAN adaptive thresholding
+					if (params.bAdaptiveThresh)
+					{
+						threshWindow.push_back(templateMatches);
+						if (threshWindow.size() >= params.iAdaptiveThreshWindowSize)
+						{
+							// We have collected enough iterations to take a median and compare to the current threshold value
+							std::sort(threshWindow.begin(), threshWindow.end());
+							size_t n = threshWindow.size();
+							int current_med = 0;
+							if (n % 2)
+							{ // odd array size
+								current_med = threshWindow[n / 2];
+							}
+							else { // even array size
+								current_med = (threshWindow[n / 2 - 1] + threshWindow[n / 2]) / 2;
+							}
+							// now compare the median to the current threshold and update if appropriate
+							if (
+								((current_med > params.iThresh) && (!params.bThreshMode)) // trying to "push up" firing and median is high
+								||
+								((current_med < params.iThresh) && (params.bThreshMode)) // trying to "pull down" firing and median is low
+								)
+							{
+								// update threshold
+								params.iThresh = current_med;
+							}
+							// now clear
+							threshWindow.clear();
+						}
+					}
+					// DONE WITH THRESHOLD UPDATE
+
+
 					//KS moved this so i write output every syll regardless of matches 
 					// Save the spikes into times, templates, amplitudes
 					
@@ -881,7 +915,8 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 						<< ",NI last edge sample= " << firstNiEdge << ",IM samp count at syll on= " << syllImCt
 						<< ", IM start= " << targStartCt
 						<< ", IM end=  " << IM_latestCt
-						<< ",processesing time= " << processTime << ",NI samples fetched = "<< NI_latestCt - NI_processedCT << std::endl;
+						<< ",processesing time= " << processTime << ",NI samples fetched = "<< NI_latestCt - NI_processedCT 
+						<< ", Threshold = " << params.iThresh << std::endl;
 					OnlineSpikesPayload payload = { recordingOffset,
 									IM_latestCt,
 									times,

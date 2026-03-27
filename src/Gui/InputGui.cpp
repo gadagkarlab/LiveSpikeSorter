@@ -133,8 +133,10 @@ InputGUI::InputGUI(InputParameters cmdLineParams)
 	Params.sSylNum = "1 2";
 	Params.bFeedbackMode = false;
 	Params.iDigLineIdx = 4;
-	Params.fPulseWindow = 10.0;
 	Params.iNumAnChans = 10;
+	Params.sLogfilesPath = "C:\\Users\\brian\\Documents\\Gadagkar Lab\\";
+	Params.bAdaptiveThresh = false;
+	Params.iAdaptiveThreshWindowSize = 21;
 
 }
 
@@ -223,6 +225,12 @@ void InputGUI::gatherNetworkParameters() {
 }
 
 void InputGUI::gatherDataAccquisitionParameters() {
+
+	ImGui::Text("Log File Folder:"); ImGui::SameLine();
+	HelpMarker("Folder where we will write spike output, syllable log, and run log.");
+	InputTextWithFileDialog("##LogFolder", &Params.sLogfilesPath, "Select##folderButton", Params.sLogfilesPath.c_str(), NULL, NULL, NULL, true);
+
+
 	ImGui::Text("Input Folder:"); ImGui::SameLine();
 	HelpMarker("Folder containing the templates.npy, whitening_mat.npy, and channel_map.npy files.");
 	InputTextWithFileDialog("##Folder", &Params.sInputFolder, "Select##folderButton", Params.sInputFolder.c_str(), NULL, NULL, NULL, true);
@@ -514,7 +522,7 @@ void InputGUI::gatherFeedbackParameters() {
 		ImGui::InputFloat("##Delay3", &Params.fDelay3, 1, 10, "%.2f");
 
 		ImGui::Text("Threshold:");
-		ImGui::SameLine(); HelpMarker("Number of spikes below/above (set by following tickbox) which feedback is triggered.");
+		ImGui::SameLine(); HelpMarker("Initial number of spikes below/above (set by following tickbox) which feedback is triggered.");
 		ImGui::InputInt("##Threshold", &Params.iThresh, 1, 10);
 
 		ImGui::Checkbox("Trigger Feedback Below (unchecked) or Above (checked) Threshold.", &Params.bThreshMode);
@@ -533,9 +541,12 @@ void InputGUI::gatherFeedbackParameters() {
 		ImGui::Text("Number of Analog Channels on NI Card:");
 		ImGui::InputInt("##NumAnChans", &Params.iNumAnChans, 1, 2);
 
-		ImGui::Text("Pulse Window (ms):");
-		ImGui::SameLine(); HelpMarker("Duration over which syllable-number-identifying pulses are counted.");
-		ImGui::InputFloat("##PulseWindow", &Params.fPulseWindow, 1, 10, "%.2f");
+		ImGui::Checkbox("Use Adaptive Thresholding.", &Params.bAdaptiveThresh);
+		if (Params.bAdaptiveThresh) {
+			ImGui::Text("Adaptive Threshold Window Size:");
+			ImGui::SameLine(); HelpMarker("Number of syllables over which median value is computed (odd size preferred).");
+			ImGui::InputInt("##AdaptWindow", &Params.iAdaptiveThreshWindowSize, 1, 10);
+		}
 
 
 	}
@@ -546,7 +557,7 @@ void InputGUI::gatherFeedbackParameters() {
 // BRIAN
 
 void InputGUI::writeParamFile() {
-	std::ofstream ParamFile("params.txt");
+	std::ofstream ParamFile(Params.sLogfilesPath + "params.txt");
 	ParamFile << "Input Folder, " << Params.sInputFolder << std::endl;
 	ParamFile << "IMEC File, " << Params.sImecFile << std::endl;
 	ParamFile << "NIDQ File, " << Params.sNidqFile << std::endl;
@@ -564,5 +575,18 @@ void InputGUI::writeParamFile() {
 	ParamFile << "Delay 3, " << Params.fDelay3 << std::endl;
 	ParamFile << "Threshold mode, " << Params.bThreshMode << std::endl;
 	ParamFile << "Threshold spikes, " << Params.iThresh << std::endl;
+
+	// BRIAN again
+	if (Params.bAdaptiveThresh)
+	{
+		ParamFile << "Adaptive Thresholding, ON " << std::endl;
+		ParamFile << "Adaptive Threshold Window Size, " << Params.iAdaptiveThreshWindowSize << std::endl;
+	}
+	else
+	{
+		ParamFile << "Adaptive Thresholding, OFF " << std::endl;
+		ParamFile << "Adaptive Threshold Window Size, 0" << std::endl;
+	}
+
 	ParamFile.close();
 }

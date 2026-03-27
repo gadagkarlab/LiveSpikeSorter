@@ -273,19 +273,6 @@ InputParameters parseCmdArgs(int argc, char* argv[]) {
 //
 // ------------------------------------------------------------------------------
 int main(int argc, char* argv[]) {
-	std::ofstream logFile("run.log");
-
-	// Check if the file opened successfully
-	if (!logFile.is_open()) {
-		std::cerr << "Unable to open log file!" << std::endl;
-		return 1;
-	}
-	// Back up the original buffer of std::cout
-	std::streambuf* originalCoutBuffer = std::cout.rdbuf();
-	// Redirect std::cout to the log file
-	std::cout.rdbuf(logFile.rdbuf());
-	// Now, anything you print using std::cout will go to the log file
-	std::cout << "LOG FILE CAPTURES COUT" << std::endl;
 
 	exeFolderSetup(); // TODO check if this is necessary
 
@@ -295,6 +282,10 @@ int main(int argc, char* argv[]) {
 
 	// Gather the final input arguments after the user is finished with the input GUI
 	InputParameters params = gui.gatherInputParameters();
+	// BRIAN
+	std::ofstream logPath(params.sLogfilesPath + "run.log");
+	std::cout.rdbuf(logPath.rdbuf());
+	//
 
 	// Start the main server and perform handshakes with spikesorter
 	std::cout << "Starting Main Server." << std::endl;
@@ -364,6 +355,6 @@ int main(int argc, char* argv[]) {
 		decoderThreads[i].join();
 	}
 
-	logFile.close();
+	logPath.close();
 	return 0;
 }

@@ -9,67 +9,69 @@ typedef unsigned short  uint16;
 
 struct InputParameters {
 	std::string							sInputFolder{},
-										sImecFile{},
-										sNidqFile{},
-										sSpikesFile{},
-										sLogFile{},
-										sEventFile{},
-										sDataAccquisitionHost{},
-										sDecoderWorkFolder{},
-										sDecoderInputFolder{},
-										sOSSOutputFolder{},
-										sSylNum{}, // BRIAN
-										sTemplateIdx{}, // BRIAN
-										sdmIP{};
+		sImecFile{},
+		sNidqFile{},
+		sSpikesFile{},
+		sLogFile{},
+		sEventFile{},
+		sDataAccquisitionHost{},
+		sDecoderWorkFolder{},
+		sDecoderInputFolder{},
+		sOSSOutputFolder{},
+		sSylNum{}, // BRIAN
+		sTemplateIdx{}, // BRIAN
+		sLogfilesPath{}, // BRIAN
+		sdmIP{};
 
 	uint16								uDataAccquisitionPort,
-										uSelectedDevice;
+		uSelectedDevice;
 
 	std::vector<uint16>					vSelectedDevices,
-										vChannelSubset;
+		vChannelSubset;
 
 	std::map<uint16, std::string>		mapDeviceFilePaths,
-										mapOSSOutputFolders,
-										mapDecoderInputFolders,
-										mapSpikeFiles;
+		mapOSSOutputFolders,
+		mapDecoderInputFolders,
+		mapSpikeFiles;
 
 	double								dTau,
-										dThreshold,
-										dRatioToMax;
+		dThreshold,
+		dRatioToMax;
 
 	float								fImecSamplingRate,
-										fNidqSamplingRate,
-										fDelay1, // BRIAN
-										fDelay2, // BRIAN
-										fDelay3, // BRIAN
-										fPulseWindow, // BRIAN
-										fThresholdStd;
+		fNidqSamplingRate,
+		fDelay1, // BRIAN
+		fDelay2, // BRIAN
+		fDelay3, // BRIAN
+		fThresholdStd;
 
 	int									iSubstream,
-										iNidqRefreshRate,
-										iMinScanWindow,
-										iMaxScanWindow,
-										iConvolutionTimes,
-										iDownsampling,
-										iMaxIts,
-										iTimeBehind,
-										iAvgWindowTime,
-										iRedundancy,
-										iWindowLength,
-										iBinLength,
-										iWindowOffset,
-										iSorterType,
-										iDigLineIdx, // BRIAN
-										iNumAnChans, // BRIAN
-										iThresh, // BRIAN
-										iNumTemplates;
+		iNidqRefreshRate,
+		iMinScanWindow,
+		iMaxScanWindow,
+		iConvolutionTimes,
+		iDownsampling,
+		iMaxIts,
+		iTimeBehind,
+		iAvgWindowTime,
+		iRedundancy,
+		iWindowLength,
+		iBinLength,
+		iWindowOffset,
+		iSorterType,
+		iDigLineIdx, // BRIAN
+		iNumAnChans, // BRIAN
+		iThresh, // BRIAN
+		iAdaptiveThreshWindowSize, // BRIAN
+		iNumTemplates;
 
 	bool								bReadFromFile,
-										bIsDecoding,
-										bIsSendingFeedback,
-										bFeedbackMode, // BRIAN
-										bThreshMode, // BRIAN
-										bSmallskip;
+		bIsDecoding,
+		bIsSendingFeedback,
+		bFeedbackMode, // BRIAN
+		bThreshMode, // BRIAN
+		bAdaptiveThresh, // BRIAN
+		bSmallskip;
 
 	std::vector<int>					vSylNum; // BRIAN
 
