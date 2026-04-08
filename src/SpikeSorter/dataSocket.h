@@ -38,6 +38,7 @@ public:
 	virtual t_ull	fetchEventInfo(int &eventLabel, t_ull lStartCt, OSSSpecificParams osParams) = 0;
 	virtual void	setDigitalOut(int signal = 0) {};
 	virtual t_ull	fetchNidqLatestAndCountEdges(OSSSpecificParams osParams, t_ull lStartCt, bool &prevHigh, int &edgeCount, std::vector<t_ull> &edgeTimes, int m_nMaxSize = 240, int m_nMinSize = 40) = 0;
+	virtual t_ull	fetchNidqLatestAndReadBits(OSSSpecificParams osParams, t_ull lStartCt, bool &prevHigh, int &edgeCount, std::vector<t_ull> &edgeTimes, int m_nMaxSize = 240, int m_nMinSize = 40) = 0;
 
 
 	virtual bool   isRunning() { return true; };
@@ -86,6 +87,7 @@ public:
 	t_ull	initNidqStream();
 	t_ull	fetchEventInfo(int &eventLabel, t_ull lStartCt, OSSSpecificParams osParams);
 	t_ull	fetchNidqLatestAndCountEdges(OSSSpecificParams osParams, t_ull lStartCt, bool &prevHigh, int &edgeCount, std::vector<t_ull> &edgeTimes, int m_nMaxSize = 240, int m_nMinSize = 40);
+	t_ull	fetchNidqLatestAndReadBits(OSSSpecificParams osParams, t_ull lStartCt, bool &prevHigh, int &edgeCount, std::vector<t_ull> &edgeTimes, int m_nMaxSize = 240, int m_nMinSize = 40);
 	void	setDigitalOut(int signal = 0);// KS to dbl check 
 
 	bool   isRunning();

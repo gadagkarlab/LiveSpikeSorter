@@ -43,6 +43,7 @@ struct InputParameters {
 		fDelay1, // BRIAN
 		fDelay2, // BRIAN
 		fDelay3, // BRIAN
+		fWindowDur, // BRIAN
 		fThresholdStd;
 
 	int									iSubstream,
@@ -63,6 +64,7 @@ struct InputParameters {
 		iNumAnChans, // BRIAN
 		iThresh, // BRIAN
 		iAdaptiveThreshWindowSize, // BRIAN
+		iNumWindows, // BRIAN
 		iNumTemplates;
 
 	bool								bReadFromFile,
@@ -71,6 +73,7 @@ struct InputParameters {
 		bFeedbackMode, // BRIAN
 		bThreshMode, // BRIAN
 		bAdaptiveThresh, // BRIAN
+		bWindowMode, // BRIAN
 		bSmallskip;
 
 	std::vector<int>					vSylNum; // BRIAN

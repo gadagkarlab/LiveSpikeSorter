@@ -267,6 +267,44 @@ t_ull StreamDataSocket::fetchNidqLatestAndCountEdges(OSSSpecificParams osParams,
 	return lLatestCt;
 }
 
+t_ull StreamDataSocket::fetchNidqLatestAndReadBits(OSSSpecificParams osParams, t_ull lStartCt, bool &prevHigh, int &edgeCount, std::vector<t_ull> &edgeTimes, int m_nMaxSize, int m_nMinSize) {
+
+	// last 3 bits of the line encode syllable
+	int bitIdx = 5;
+
+	t_ull lLatestCt = getStreamSampleCt(NIDQ, osParams);
+
+	t_ull lToGet = lLatestCt - lStartCt;
+
+	if (lStartCt == ULLONG_MAX) {
+		lToGet = m_nMinSize;
+	}
+	if (lToGet > m_nMaxSize) {
+		lToGet = m_nMaxSize;
+	}
+
+	lStartCt = lLatestCt - lToGet;
+
+	lLatestCt = fetch(m_sNidqBuffer, S, NIDQ, 0, lStartCt, lToGet, m_vNidqChannels);
+
+	edgeCount = 0;
+	edgeTimes.clear();
+
+	for (t_ull i = 0; i < lToGet; ++i) {
+		bool high = (m_sNidqBuffer[i] >> bitIdx);
+
+		if (!prevHigh && high) {
+			edgeCount = m_sNidqBuffer[i] >> bitIdx;
+			edgeTimes.push_back(lStartCt + i);
+		}
+
+		prevHigh = high;
+	}
+
+	return lLatestCt;
+}
+
+
 // fetch the NIDQ data and extract stimulus event time and label (if they exist)
 t_ull StreamDataSocket::fetchEventInfo(int &eventLabel, t_ull lStartCt, OSSSpecificParams osParams) {
 	// Compute how many samples needed to get to present time
@@ -307,8 +345,8 @@ t_ull StreamDataSocket::fetchEventInfo(int &eventLabel, t_ull lStartCt, OSSSpeci
 //KS needs to check the lines I use and make sure it works. this uses a much older form of the API and im moderately concerened neweer SGLx wont support it
 void StreamDataSocket::setDigitalOut(int signal) {
 
-	constexpr const char* LINE5 = "PXI1Slot4_2/port0/line5";
-	constexpr const char* LINE7 = "PXI1Slot4_2/port0/line7";
+	constexpr const char* LINE5 = "PXI1Slot4_2/port1/line5";
+	constexpr const char* LINE7 = "PXI1Slot4_2/port1/line7";
 
 	if (signal == 0) {
 		//Sleep(1);

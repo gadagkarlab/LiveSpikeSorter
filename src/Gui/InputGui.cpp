@@ -134,9 +134,12 @@ InputGUI::InputGUI(InputParameters cmdLineParams)
 	Params.bFeedbackMode = false;
 	Params.iDigLineIdx = 4;
 	Params.iNumAnChans = 10;
-	Params.sLogfilesPath = "C:\\Users\\brian\\Documents\\Gadagkar Lab\\";
+	Params.sLogfilesPath = "C:\\Users\\ksnpx\\defaultLogs\\";
 	Params.bAdaptiveThresh = false;
 	Params.iAdaptiveThreshWindowSize = 21;
+	Params.bWindowMode = false;
+	Params.iNumWindows = 4;
+	Params.fWindowDur = 10.0;
 
 }
 
@@ -548,6 +551,15 @@ void InputGUI::gatherFeedbackParameters() {
 			ImGui::InputInt("##AdaptWindow", &Params.iAdaptiveThreshWindowSize, 1, 10);
 		}
 
+		ImGui::Checkbox("Use Windowed Spike-Counting.", &Params.bWindowMode);
+		if (Params.bWindowMode) {
+			ImGui::Text("Number of Windows:");
+			ImGui::SameLine(); HelpMarker("Number of windows over which spike counting will occur, beginning at Delay 1.");
+			ImGui::InputInt("##NumWindows", &Params.iNumWindows, 1, 10);
+			ImGui::Text("Duration per Window:");
+			ImGui::SameLine(); HelpMarker("Duration of the window. There will be an additional 2ms crossover with the previous widow.");
+			ImGui::InputFloat("##WindowDur", &Params.fWindowDur, 1, 10);
+		}
 
 	}
 }
