@@ -35,7 +35,7 @@ public:
 	~OnlineSpikesV2();
 	void runSpikeSorting();
 	void runSyllDetectThenSorting(InputParameters params);// KS- main fxn 
-	void runSyllDetectThenSorting_Windowed(InputParameters params); // BRIAN
+	// void runSyllDetectThenSorting_Windowed(InputParameters params); // BRIAN
 	//void runTriggeredWithContinuousSorting(); // KS- fxn  not implemented 
 
 private:

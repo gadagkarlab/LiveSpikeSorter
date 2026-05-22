@@ -483,6 +483,22 @@ void OnlineSpikesV2::initializeStaticMemory(InputParameters params)
 
 	loadChannelMap(params.sInputFolder + "channelMap.npy");
 	loadTemplates(params.sInputFolder + "templates.npy");
+	
+	// print out the templates we care about:
+	std::ofstream templateFile(params.sLogfilesPath + "templates_of_interest.txt");
+	for (int t : params.usTemplateIdx) {
+		templateFile << "Template Index: " << t << std::endl;
+		for (int i = 0; i < C; i++) {
+			for (int j = 0; j < M; j++) {
+				templateFile << D_chan_samp_temp[i + j * C + t * C * M] << " ";
+			}
+			templateFile << std::endl;
+		}
+		
+	}
+	templateFile.close();
+	//
+	
 	loadWhitening(params.sInputFolder + "whiteningMat.npy");
 	loadTemplateMap(params.sInputFolder + "templateMap.npy");
 	loadKilosortTrainingData(params.sInputFolder);
@@ -662,31 +678,69 @@ void OnlineSpikesV2::countNidqRisingEdgesInBuffer(const float* fetchBuf, t_ull p
 
 //KS-mainfxn, BRIAN edited
 void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
-	//std::vector<int> targetPulseCounts, float delay1_ms, float delay2_ms, float delay3_ms, std::unordered_set<int> targetTemplates, int matchesThreshold) {
-	std::vector<int> targetPulseCounts = params.vSylNum;
 
-	// BRIAN threshWindow used if adaptive thresholding
-	std::vector<int> threshWindow;
-	//
+	static const char *ptLabel = { "OnlineSpikesV2::runSyllDetectThenSorting" };
 
+	// read in necessary parameters from input GUI
+	std::vector<int> targetSyllIDs = params.vSylNum;
 	float delay1_ms = params.fDelay1;
 	float delay2_ms = params.fDelay2;
 	float delay3_ms = params.fDelay3;
 	std::unordered_set<int> targetTemplates = params.usTemplateIdx;
 	int matchesThreshold = params.iThresh;
+	// file to write syllable/spike log to
+	std::ofstream syllLogFile(params.sLogfilesPath + "syll_log.txt");
+	// used if adaptive thresholding
+	std::vector<int> threshWindow;
+	// used if performing multiple-window counting method
+	int numWindows = params.iNumWindows;
+	float windowDur = params.fWindowDur;
 
-	static const char *ptLabel = { "OnlineSpikesV2::runSyllDetectThenSorting" };
+	// keep track of processing time
+	long processTime = 0;
 
-	long 	 allowedCt, // Samples we are behind
-		skipCounter = 0, // Number of times we skipped
-		currBatchNumSamples; // Number of samples in current batch
+	// Parameters specific to each individual OSS during parallelization
+	OSSSpecificParams osParams = {
+		C,
+		channelMap,
+		substream
+	};
 
+	// sampling rates
+	float NIsamplingRate = sglxSock->getStreamSampleRate(NIDQ, osParams);
+	float IMsamplingRate = sglxSock->getStreamSampleRate(IMEC, osParams);
+
+	// offsets for syll counting/DAF relative to syll identification time.
+	// time spike counting starts (or first window in multi-window counting mode)
+	t_ull offset_1 = (delay1_ms * IMsamplingRate / 1000.0) - 40;
+	// time spike counting ends (unused in multi-window counting mode)
+	t_ull offset_2 = (delay2_ms * IMsamplingRate / 1000.0) + 40;
+	// time between window ends for multi-window mode
+	t_ull winDur_IMEC = (windowDur * IMsamplingRate / 1000.0);
+	// window overhang for windows after window 1 (for now fixed at 2 ms
+	t_ull winOverhang_IMEC = (2 * IMsamplingRate / 1000.0);
+	// time DAF starts if necessary (unused in multi-window counting mode)
+	t_ull offset_3 = (delay3_ms * IMsamplingRate / 1000.0);
+	std::cout << "offset 1= " << offset_1 << "offset2= " << offset_2 << "offset3 =" << offset_3 << std::endl;
+
+	// total template matches in current syll
+	int templateMatches = 0;
+
+	// ever-updating counts for multiple-window counting mode
+	// if pushing DOWN, we keep track of count in the last two windows (past and recent) and add to give templateMatches
+	// if pushing UP, we consider sum of all windows, so "pastWindow" is not used
+	int pastCount = 0; 
+	int recentCount = 0;
+
+	// used for detecting syllable ID
 	bool prevHigh = false;
-	int edgeCount = 0;
 	std::vector<t_ull> edgeTimes
 		;
 	std::deque<t_ull> recentEdges;
 
+	int detectedSyllID = 0;
+
+	// Sample-index timing for NI and IMEC operations, such as processing, fetching, and digital out for DAF
 	t_ull NI_processedCT,
 		NI_nFetched,
 		IM_processedCT,
@@ -696,8 +750,11 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 		targEndCt,
 		targFeedbackCt;
 
-	int templateMatches = 0;
-	int pulsesInWindow = 0;
+	// for tracking whether we've "fallen behind" the sample clock
+	long 	 allowedCt, // Samples we are behind
+		skipCounter = 0, // Number of times we skipped
+		currBatchNumSamples; // Number of samples in current batch
+
 
 	float	p2p; // peak-to-peak data to be sent to decoder
 	std::vector<float> p2ps(C, 0); // per-channel peak-to-peak data to be sent to decoder
@@ -708,34 +765,21 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 	// timespec's to keep track of processing time to be sent to the Decoder
 	struct timespec batchBefore, batchAfter;
 		
-	// file to write syllable/spike log to
-	std::ofstream syllLogFile(params.sLogfilesPath + "syll_log.txt");
 
 	// Vectors to store the spike times, templates, and amplitudes to be sent to the Decoder
 	std::vector<long> times;
 	std::vector<long> templates;
 	std::vector<float> amplitudes;
+	// and a set of "past" times/templates/amplitudes used only in windowing mode
+	std::vector<long> past_times;
+	std::vector<long> past_templates;
+	std::vector<float> past_amplitudes;
+
 	memset(lastSpikeTime.data(), 0, sizeof(long) * T);
 
-	// Parameters specific to each individual OSS during parallelization
-	OSSSpecificParams osParams = {
-		C,
-		channelMap,
-		substream
-	};
 
 	// open NI Stream 
 	sglxSock->initNidqStream();
-
-
-	float NIsamplingRate = sglxSock->getStreamSampleRate(NIDQ, osParams);
-	float IMsamplingRate = sglxSock->getStreamSampleRate(IMEC, osParams);
-
-	t_ull offset_1 = (delay1_ms * IMsamplingRate / 1000.0) -40 ;
-	t_ull offset_2 = (delay2_ms * IMsamplingRate / 1000.0) + 40 ;
-	t_ull offset_3 = (delay3_ms * IMsamplingRate / 1000.0);
-	//t_ull imCorrectSyll = 11 * IMsamplingRate / 1000.0; 
-	std::cout << "offset 1= " << offset_1 << "offset2= " << offset_2 << "offset3 =" << offset_3 << std::endl;
 	
 	t_ull currImTime,
 		firstNiEdge,
@@ -747,122 +791,317 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 	NI_latestCt = sglxSock->getStreamSampleCt(NIDQ, osParams);
 	NI_processedCT = NI_latestCt;
 
+	// MAIN LOOP
 	while (true) {
-		pulsesInWindow = 0;
+		// reset syllable ID, matches, past and recent counts
+		detectedSyllID = 0;
+		templateMatches = 0;
+		pastCount = 0;
+		recentCount = 0;
 
+		// constantly looking for a syllable identification trigger
 		sglxSock->waituntilNI(NI_latestCt + 5, NIsamplingRate, osParams);
 		NI_processedCT = NI_latestCt;
-		
-		//std::cout << "done waiting " << std::endl;
 		currImTime = sglxSock->getStreamSampleCt(IMEC, osParams);
-		NI_latestCt = sglxSock->fetchNidqLatestAndReadBits(osParams, NI_processedCT, prevHigh, edgeCount, edgeTimes); // KS added ADD MIN WINDOW FOR NI!!!!!!!!!
+		NI_latestCt = sglxSock->fetchNidqLatestAndReadBits(osParams, NI_processedCT, prevHigh, detectedSyllID, edgeTimes); // KS added ADD MIN WINDOW FOR NI
 		
-		pulsesInWindow = edgeCount; // BRIAN  bypassing old serial code
-		if (std::find(targetPulseCounts.begin(),
-			targetPulseCounts.end(),
-			pulsesInWindow) != targetPulseCounts.end()) 
+		// check if the syllable index read in is in our list of desired syllables as set in input GUI
+		if (std::find(targetSyllIDs.begin(),
+			targetSyllIDs.end(),
+			detectedSyllID) != targetSyllIDs.end())
 			{
+			// in a target syllable. reset processing time
+			firstNiEdge = edgeTimes.front();
+			processTime = 0;
+			std::cout << "in syll" << std::endl;
+
 			elapsedIMtime = IMsamplingRate * (NI_latestCt - firstNiEdge) / NIsamplingRate;
-			//std::cout << "elapsedIM time = " << elapsedIMtime << std::endl;
-
+			std::cout << "elapsedIMTIME = " << elapsedIMtime << std::endl;
 			syllImCt =  currImTime - elapsedIMtime; //theres always like a 10-12ms delay to get here from the NI time dont ask me why i hate this 
-			// now in a syllable i want to get ready for sorting 
+			std::cout << "syllIMct = " << syllImCt << std::endl;
 
-			targStartCt = syllImCt + offset_1;// sample indices i want to sort 
-			targEndCt = syllImCt + offset_2;	
-			targFeedbackCt = syllImCt + offset_3;
-					
+			
+			// routine is sufficiently different for multi-window mode that I have placed an if statement here. Perhaps there is a more elegant method
+			if (!params.bWindowMode) {
+				// not in multi-window mode
+				targStartCt = syllImCt + offset_1; // sample index to start sorting
+				targEndCt = syllImCt + offset_2; // sample index to stop sorting
+				targFeedbackCt = syllImCt + offset_3; // sample index to DAF if FB logic satisfied
+				std::cout << "targStartCt = " << targStartCt << "targEndCt = " << targEndCt << std::endl;
+				// fetch data to sort
+				sglxSock->waitUntilIMEC(targEndCt, IMsamplingRate, osParams); // rough wait until samples should b ready, is there any better way to do it? 
+				clock_gettime(batchBefore);
+				IM_latestCt = sglxSock->fetchImecExact(fetchBuf, osParams, targStartCt, targEndCt);
+				currBatchNumSamples = IM_latestCt - targStartCt;
 
-			sglxSock->waitUntilIMEC(targEndCt,IMsamplingRate, osParams); // rough wait until samples should b ready, is there any better way to do it? 
-					
-			clock_gettime(batchBefore);
+				// SHREYAS' KILOSORT CODE STARTS HERE
+				{
+					Timer timer("cpu to gpu");
+					if (skip) {
+						// Skip the last minScanWindow of previous batch (the first m_lMinWindow * m_lC bits)
+						_CUDA_CALL(cudaMemcpy(d_fetchBuf, fetchBuf + minWindow * C, C * currBatchNumSamples * sizeof(float), cudaMemcpyHostToDevice));
 
-			IM_latestCt = sglxSock->fetchImecExact(fetchBuf, osParams, targStartCt, targEndCt); 
-			currBatchNumSamples = IM_latestCt- targStartCt; 
-
-			{
-				Timer timer("cpu to gpu");
-				if (skip) {	
-					// Skip the last minScanWindow of previous batch (the first m_lMinWindow * m_lC bits)
-					_CUDA_CALL(cudaMemcpy(d_fetchBuf, fetchBuf + minWindow * C, C * currBatchNumSamples * sizeof(float), cudaMemcpyHostToDevice));
-
-					// Increment skip counter
-					skipCounter++;
+						// Increment skip counter
+						skipCounter++;
+					}
+					else {
+						_CUDA_CALL(cudaMemcpy(d_fetchBuf, fetchBuf, C * currBatchNumSamples * sizeof(float), cudaMemcpyHostToDevice));
+					}
+					_CUDA_CALL(cudaDeviceSynchronize());
 				}
-				else {
-					_CUDA_CALL(cudaMemcpy(d_fetchBuf, fetchBuf, C * currBatchNumSamples * sizeof(float), cudaMemcpyHostToDevice));
+				// Calculate peak-to-peak for OutputGUI
+				// TODO: Try and make it compute P2P per channel, send it to the GUI, write GUI to display per-channel P2P, and then 
+				//			make sure the computations for P2P per channel is fast by writing custom kernel
+				p2p = P2P_calc(d_fetchBuf, C * currBatchNumSamples);
+				// Remove means
+				_CUDA_CALL(cudaMemset(d_means, 0, C * sizeof(float)));
+				{
+					Timer timer("meanRemove()");
+					meanRemove(d_fetchBuf, d_means, currBatchNumSamples, C);
 				}
 				_CUDA_CALL(cudaDeviceSynchronize());
-			}
-			// Calculate peak-to-peak for OutputGUI
-			// TODO: Try and make it compute P2P per channel, send it to the GUI, write GUI to display per-channel P2P, and then 
-			//			make sure the computations for P2P per channel is fast by writing custom kernel
-			p2p = P2P_calc(d_fetchBuf, C * currBatchNumSamples);
-			// Remove means
-			_CUDA_CALL(cudaMemset(d_means, 0, C * sizeof(float)));
-			{
-				Timer timer("meanRemove()");
-				meanRemove(d_fetchBuf, d_means, currBatchNumSamples, C);
-			}
-			_CUDA_CALL(cudaDeviceSynchronize());
-			// Median removal
-			{
-				Timer timer("medianRemove()");
-				medianRemove(d_fetchBuf, C, currBatchNumSamples);
-			}
-			_CUDA_CALL(cudaDeviceSynchronize());
-			// Perform a high-pass filter at 300 hz assuming the signal is at 30000 hz
-			{
-				Timer timer("highpassFilter()");
-				transpose(d_fetchBuf, d_fetchBuf2, currBatchNumSamples, C);
-				highpassFilter(d_fetchBuf2, C, currBatchNumSamples, IMsamplingRate, 300);
-			}
-			_CUDA_CALL(cudaDeviceSynchronize());
-			// Whiten the batch on device (THIS WORKS FOR SURE, DO NOT TOUCH OR WORRY ABOUT IT)
-			{
-				Timer timer("whitening()");
-				matMul(cublasHandle, d_whitening, d_fetchBuf2, d_fetchBuf, C, C, currBatchNumSamples);
-			}
-			_CUDA_CALL(cudaDeviceSynchronize());
-			// Drift correct
-			{	//KS im also worried about doing this drift from my morning recording is likely to be much worse than later in the day.
-				Timer timer("driftCorrection()");
-				matMul(cublasHandle, d_driftMatrix, d_fetchBuf, d_fetchBuf2, C, C, currBatchNumSamples);
-			}
-			_CUDA_CALL(cudaDeviceSynchronize());
-			// Perform OMP
-			numSpikes = kilosortMatchingPursuit(d_fetchBuf2, currBatchNumSamples);
-			//std::cout << "currBatch Samples= " << currBatchNumSamples << " and had numSpikes= " << numSpikes << std::endl;
-
-			// Use results of OMP to assign unmapped spike templates to the closest clusters
-			// - inputs: d_spikeTemplates, d_spikeTimes, d_residual
-			// - outputs: closest_x, closest_y
-			{
-				Timer timer("closestCluster()");// KS- im worried about this function is it just estimating spike positions? 
-				computeClosestClusters(currBatchNumSamples, numSpikes);
-			}
-
-			saveSpikes(numSpikes, targStartCt, IM_latestCt, times, templates, amplitudes); // KS this needs to go here 
-			//Timer timer("cpu to gpu");
-			int templateMatches = 0;
-			for (int templ : templates) {
-				if (targetTemplates.count(templ)) {
-					++templateMatches;
+				// Median removal
+				{
+					Timer timer("medianRemove()");
+					medianRemove(d_fetchBuf, C, currBatchNumSamples);
 				}
-			}
-			clock_gettime(batchAfter);
-			long processTime = GetTimeDiff(batchAfter, batchBefore);
+				_CUDA_CALL(cudaDeviceSynchronize());
+				// Perform a high-pass filter at 300 hz assuming the signal is at 30000 hz
+				{
+					Timer timer("highpassFilter()");
+					transpose(d_fetchBuf, d_fetchBuf2, currBatchNumSamples, C);
+					highpassFilter(d_fetchBuf2, C, currBatchNumSamples, IMsamplingRate, 300);
+				}
+				_CUDA_CALL(cudaDeviceSynchronize());
+				// Whiten the batch on device (THIS WORKS FOR SURE, DO NOT TOUCH OR WORRY ABOUT IT)
+				{
+					Timer timer("whitening()");
+					matMul(cublasHandle, d_whitening, d_fetchBuf2, d_fetchBuf, C, C, currBatchNumSamples);
+				}
+				_CUDA_CALL(cudaDeviceSynchronize());
+				// Drift correct
+				{	//KS im also worried about doing this drift from my morning recording is likely to be much worse than later in the day.
+					Timer timer("driftCorrection()");
+					matMul(cublasHandle, d_driftMatrix, d_fetchBuf, d_fetchBuf2, C, C, currBatchNumSamples);
+				}
+				_CUDA_CALL(cudaDeviceSynchronize());
+				// Perform OMP
+				numSpikes = kilosortMatchingPursuit(d_fetchBuf2, currBatchNumSamples);
+				//std::cout << "currBatch Samples= " << currBatchNumSamples << " and had numSpikes= " << numSpikes << std::endl;
 
-					
-			bool shouldFeedback = params.bThreshMode
-				? (templateMatches > params.iThresh)// KS updated 
-				: (templateMatches <= params.iThresh);
-			if (shouldFeedback){
-				if (offset_3 > 0) {
-					sglxSock->waitUntilIMEC(targFeedbackCt-75, IMsamplingRate, osParams);// -2.5ms to control a bit for the time it takes to actually send the command and read by LV
+				// Use results of OMP to assign unmapped spike templates to the closest clusters
+				// - inputs: d_spikeTemplates, d_spikeTimes, d_residual
+				// - outputs: closest_x, closest_y
+				{
+					Timer timer("closestCluster()");// KS- im worried about this function is it just estimating spike positions? 
+					computeClosestClusters(currBatchNumSamples, numSpikes);
+				}
+				// SHREYAS' KILOSORT CODE ENDS HERE
+				std::cout << "passed sort" << std::endl;
+				saveSpikes(numSpikes, targStartCt, IM_latestCt, times, templates, amplitudes); // KS this needs to go here 
+				//Timer timer("cpu to gpu");
+
+				// count templates
+				for (int templ : templates) {
+					if (targetTemplates.count(templ)) {
+						++templateMatches;
+					}
+				}
+				clock_gettime(batchAfter);
+				processTime = GetTimeDiff(batchAfter, batchBefore);
+
+				// FEEDBACK LOGIC
+				bool shouldFeedback = params.bThreshMode
+					? (templateMatches > params.iThresh)// KS updated 
+					: (templateMatches <= params.iThresh);
+				if (shouldFeedback) {
+					if (offset_3 > 0) {
+						sglxSock->waitUntilIMEC(targFeedbackCt - 75, IMsamplingRate, osParams);// -2.5ms to control a bit for the time it takes to actually send the command and read by LV
 					}// KS
 					sglxSock->setDigitalOut(0);
+					
+				}
+				writeSpikesToFile(times, templates, amplitudes);
 			}
+			else {
+				// In multi-window mode. this is the wild west, kids
+				int currentWindow = 0; // we will go window-by-window and break out of a while loop if conditions are met or finished all windows
+				bool decisionMade = false;
+				
+
+				while ((!decisionMade) && (currentWindow < numWindows)) {
+				
+					pastCount = recentCount;
+					recentCount = 0;
+
+					// ready to count in the next window. find start and end times for data collection
+					if (currentWindow == 0) {
+						// first window has no overhang
+						targStartCt = syllImCt + offset_1; // sample index to start sorting
+						targEndCt = targStartCt + winDur_IMEC;
+					}
+					else {
+						// subsequent windows overhang in negative time, currently fixed to 2 ms
+						// in any case, ends of windows are separated by window duration0
+						targEndCt += winDur_IMEC;
+						targStartCt = targEndCt - winDur_IMEC - winOverhang_IMEC;
+					}
+
+					// fetch data to sort
+					sglxSock->waitUntilIMEC(targEndCt, IMsamplingRate, osParams); // rough wait until samples should b ready, is there any better way to do it? 
+					clock_gettime(batchBefore);
+					IM_latestCt = sglxSock->fetchImecExact(fetchBuf, osParams, targStartCt, targEndCt);
+					currBatchNumSamples = IM_latestCt - targStartCt;
+
+					// SHREYAS' KILOSORT CODE STARTS HERE
+					{
+						Timer timer("cpu to gpu");
+						if (skip) {
+							// Skip the last minScanWindow of previous batch (the first m_lMinWindow * m_lC bits)
+							_CUDA_CALL(cudaMemcpy(d_fetchBuf, fetchBuf + minWindow * C, C * currBatchNumSamples * sizeof(float), cudaMemcpyHostToDevice));
+
+							// Increment skip counter
+							skipCounter++;
+						}
+						else {
+							_CUDA_CALL(cudaMemcpy(d_fetchBuf, fetchBuf, C * currBatchNumSamples * sizeof(float), cudaMemcpyHostToDevice));
+						}
+						_CUDA_CALL(cudaDeviceSynchronize());
+					}
+					// Calculate peak-to-peak for OutputGUI
+					// TODO: Try and make it compute P2P per channel, send it to the GUI, write GUI to display per-channel P2P, and then 
+					//			make sure the computations for P2P per channel is fast by writing custom kernel
+					p2p = P2P_calc(d_fetchBuf, C * currBatchNumSamples);
+					// Remove means
+					_CUDA_CALL(cudaMemset(d_means, 0, C * sizeof(float)));
+					{
+						Timer timer("meanRemove()");
+						meanRemove(d_fetchBuf, d_means, currBatchNumSamples, C);
+					}
+					_CUDA_CALL(cudaDeviceSynchronize());
+					// Median removal
+					{
+						Timer timer("medianRemove()");
+						medianRemove(d_fetchBuf, C, currBatchNumSamples);
+					}
+					_CUDA_CALL(cudaDeviceSynchronize());
+					// Perform a high-pass filter at 300 hz assuming the signal is at 30000 hz
+					{
+						Timer timer("highpassFilter()");
+						transpose(d_fetchBuf, d_fetchBuf2, currBatchNumSamples, C);
+						highpassFilter(d_fetchBuf2, C, currBatchNumSamples, IMsamplingRate, 300);
+					}
+					_CUDA_CALL(cudaDeviceSynchronize());
+					// Whiten the batch on device (THIS WORKS FOR SURE, DO NOT TOUCH OR WORRY ABOUT IT)
+					{
+						Timer timer("whitening()");
+						matMul(cublasHandle, d_whitening, d_fetchBuf2, d_fetchBuf, C, C, currBatchNumSamples);
+					}
+					_CUDA_CALL(cudaDeviceSynchronize());
+					// Drift correct
+					{	//KS im also worried about doing this drift from my morning recording is likely to be much worse than later in the day.
+						Timer timer("driftCorrection()");
+						matMul(cublasHandle, d_driftMatrix, d_fetchBuf, d_fetchBuf2, C, C, currBatchNumSamples);
+					}
+					_CUDA_CALL(cudaDeviceSynchronize());
+					// Perform OMP
+					numSpikes = kilosortMatchingPursuit(d_fetchBuf2, currBatchNumSamples);
+					//std::cout << "currBatch Samples= " << currBatchNumSamples << " and had numSpikes= " << numSpikes << std::endl;
+					// Use results of OMP to assign unmapped spike templates to the closest clusters
+					// - inputs: d_spikeTemplates, d_spikeTimes, d_residual
+					// - outputs: closest_x, closest_y
+					{
+						Timer timer("closestCluster()");// KS- im worried about this function is it just estimating spike positions? 
+						computeClosestClusters(currBatchNumSamples, numSpikes);
+					}
+					// SHREYAS' KILOSORT CODE ENDS HERE
+
+					// Here I have to determine if there are are any of the SAME SPIKES counted in two neighboring windows
+					// this means observing the spikes in the overhang and seeing if there are any common ones withing one ms of one another
+					// I will use a brute force method, and change this if proc time gets too high from it
+					if (currentWindow == 0) {
+						// first window has no overhang with a past window, duh
+						saveSpikes(numSpikes, targStartCt, IM_latestCt, times, templates, amplitudes); 
+						
+					}
+					else {
+						// compare past times to times to see if there are any double-counted spikes
+						saveSpikes(numSpikes, targStartCt, IM_latestCt, times, templates, amplitudes);
+
+						for (size_t i = 0; i < past_times.size(); ++i) {
+							size_t j = 0;
+							// need a WHILE loop here (not a for loop) because the size of times/templates/amplitudes will be changing
+							while (j < times.size()) {
+								// they are the same spike if times are within 30 and the templates are the same
+								if ((std::abs(past_times[i] - times[j]) <= 30) && (past_templates[i] == templates[j])) {
+									times.erase(times.begin()+j);
+									templates.erase(templates.begin() + j);
+									amplitudes.erase(amplitudes.begin() + j);
+								}
+								else {
+									j ++;
+								}
+							}
+						}
+					}
+					
+					// count templates
+					for (int templ : templates) {
+						if (targetTemplates.count(templ)) {
+							++recentCount;
+						}
+					}
+
+					clock_gettime(batchAfter);
+					processTime += GetTimeDiff(batchAfter, batchBefore);
+					// DEBUG spoof template matches
+					// recentCount = currentWindow;
+					//
+
+					// determine whether to DAF
+					if (params.bThreshMode) {
+						// pushing DOWN, so only look at last two 
+						templateMatches = pastCount + recentCount; 
+						if (templateMatches > params.iThresh) {
+							// above threshold, so DAF
+							sglxSock->setDigitalOut(0);
+							decisionMade = true;
+							// DEBUG
+							// std::cout << "DAFFED" << std::endl;
+							//
+						}
+					}
+					else {
+						// pushing UP, so need to look at all
+						templateMatches += recentCount;
+						if (templateMatches > params.iThresh) {
+							// firing enough already, so no need to process more
+							decisionMade = true;
+						}
+					}
+					// DEBUG
+					syllLogFile << "Syllable index= " << detectedSyllID << ",NI last edge sample= " << firstNiEdge << ",IM samp count at syll on= " << syllImCt
+						<< ", window number=" << currentWindow << ", window sample start=" << targStartCt << ", window sample end=" << IM_latestCt << ", processing time=" << processTime
+						<< ", templateMatches=" << templateMatches << ", Threshold = " << params.iThresh << std::endl; 
+					// END DEBUG
+					currentWindow++;
+					// writing spikes window-by-window, and "remembering" values for evaluating overhang later
+					past_times = times;
+					past_templates = templates;
+					past_amplitudes = amplitudes;
+					writeSpikesToFile(times, templates, amplitudes);
+				}
+				// if we got here, then either a decision was made or we went through all of the windows
+				// if no decision was made and we are pushing DOWN, that means that the neuron was quiet enough -> no DAF
+				// if no decision was made and we are pushing UP, that means that the neuron was too quiet -> DAF time
+				if ((!decisionMade) && (!params.bThreshMode))
+				{
+					sglxSock->setDigitalOut(0);
+					// std::cout << "DAFFED UP" << std::endl;
+				}
+
+			}
+
 			// BRIAN adaptive thresholding
 			if (params.bAdaptiveThresh)
 			{
@@ -896,14 +1135,9 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 			}
 			// DONE WITH THRESHOLD UPDATE
 					
-			writeSpikesToFile(times, templates, amplitudes);
-					
-			syllLogFile << "Syllable index= " << pulsesInWindow << ", template matches=" << templateMatches
-				<< ",NI last edge sample= " << firstNiEdge << ",IM samp count at syll on= " << syllImCt
-				<< ", IM start= " << targStartCt
-				<< ", IM end=  " << IM_latestCt
-				<< ",processesing time= " << processTime << ",NI samples fetched = "<< NI_latestCt - NI_processedCT 
-				<< ", Threshold = " << params.iThresh << std::endl;
+			// WRITE LOGS
+			
+				
 			OnlineSpikesPayload payload = { recordingOffset,
 							IM_latestCt,
 							times,
@@ -926,305 +1160,6 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 	std::cout << "ive left the while loop" << std::endl;
 }
 
-// BRIAN syll detect wth window functionality
-/*
-void OnlineSpikesV2::runSyllDetectThenSorting_Windowed(InputParameters params) {
-	std::vector<int> targetPulseCounts = params.vSylNum;
-
-	// BRIAN threshWindow used if adaptive thresholding
-	std::vector<int> threshWindow;
-	// BRIAN last two counts are tracked to determine if the threshold was crossed if pushing down, full count if pushing up
-	int pastSpikeCount = 0;
-	int latestSpikeCount = 0;
-
-	float delay1_ms = params.fDelay1;
-	float delay2_ms = params.fDelay2;
-	float delay3_ms = params.fDelay3;
-	std::unordered_set<int> targetTemplates = params.usTemplateIdx;
-	int matchesThreshold = params.iThresh;
-
-	static const char *ptLabel = { "OnlineSpikesV2::runSyllDetectThenSorting" };
-
-	long 	 allowedCt, // Samples we are behind
-		skipCounter = 0, // Number of times we skipped
-		currBatchNumSamples; // Number of samples in current batch
-
-	bool prevHigh = false;
-	int edgeCount = 0;
-	std::vector<t_ull> edgeTimes
-		;
-	std::deque<t_ull> recentEdges;
-
-	t_ull NI_processedCT,
-		NI_nFetched,
-		IM_processedCT,
-		NI_latestCt,
-		IM_latestCt,
-		targStartCt,
-		targEndCt,
-		targFeedbackCt;
-
-	int templateMatches = 0;
-	int pulsesInWindow = 0;
-
-	float	p2p; // peak-to-peak data to be sent to decoder
-	std::vector<float> p2ps(C, 0); // per-channel peak-to-peak data to be sent to decoder
-
-	// whether we performed any skipping during the current batch
-	bool skip = false;
-
-	// timespec's to keep track of processing time to be sent to the Decoder
-	struct timespec batchBefore, batchAfter;
-
-	// file to write syllable/spike log to
-	std::ofstream syllLogFile(params.sLogfilesPath + "syll_log.txt");
-
-	// Vectors to store the spike times, templates, and amplitudes to be sent to the Decoder
-	std::vector<long> times;
-	std::vector<long> templates;
-	std::vector<float> amplitudes;
-	memset(lastSpikeTime.data(), 0, sizeof(long) * T);
-
-	// Parameters specific to each individual OSS during parallelization
-	OSSSpecificParams osParams = {
-		C,
-		channelMap,
-		substream
-	};
-
-	// open NI Stream 
-	sglxSock->initNidqStream();
-
-
-	float NIsamplingRate = sglxSock->getStreamSampleRate(NIDQ, osParams);
-	float IMsamplingRate = sglxSock->getStreamSampleRate(IMEC, osParams);
-
-	// offset_1 is when to start counting, regardless of window mode
-	t_ull offset_1 = (delay1_ms * IMsamplingRate / 1000.0) - 40;
-	// offset_2 determines when to stop counting the first time
-	t_ull offset_2 = offset_1 + (params.fWindowDur * IMsamplingRate / 1000.0);
-	
-	std::cout << "offset 1= " << offset_1 << "offset2= " << offset_2 << std::endl;
-
-	// keep counting until threshold is crossed. begins true
-	bool keepCounting = true;
-	int currentWindowInd = 0;
-
-	t_ull currImTime,
-		firstNiEdge,
-		elapsedIMtime,
-		syllImCt;
-
-
-	//std::cout << "starting fetching!" << std::endl;
-	NI_latestCt = sglxSock->getStreamSampleCt(NIDQ, osParams);
-	NI_processedCT = NI_latestCt;
-
-	while (true) {
-		sglxSock->waituntilNI(NI_latestCt + 5, NIsamplingRate, osParams);
-		NI_processedCT = NI_latestCt;
-
-		//std::cout << "done waiting " << std::endl;
-		currImTime = sglxSock->getStreamSampleCt(IMEC, osParams);
-		NI_latestCt = sglxSock->fetchNidqLatestAndCountEdges(osParams, NI_processedCT, prevHigh, edgeCount, edgeTimes); // KS added ADD MIN WINDOW FOR NI!!!!!!!!!
-
-
-		for (t_ull edget : edgeTimes) {
-			recentEdges.push_back(edget);
-		}
-		if (recentEdges.size() > 0) {
-			if (NI_latestCt - recentEdges.back() > 60) {// now ready to label a syllable 
-				pulsesInWindow = recentEdges.size();
-				firstNiEdge = recentEdges.front();
-				recentEdges.clear();
-				//std::cout << "Syll ID = " << pulsesInWindow << std::endl;
-				//pulses in window = syllable ID 
-				if (std::find(targetPulseCounts.begin(),
-					targetPulseCounts.end(),
-					pulsesInWindow) != targetPulseCounts.end())
-				{ // In a TARGET SYLLABLE
-					pastSpikeCount = 0; // reset the prior window, as there is no longer a "prior window"
-					keepCounting = true; // ready to start
-					currentWindowInd = 0;
-
-					elapsedIMtime = IMsamplingRate * (NI_latestCt - firstNiEdge) / NIsamplingRate;
-					
-					syllImCt = currImTime - elapsedIMtime; //theres always like a 10-12ms delay to get here from the NI time dont ask me why i hate this 
-					
-					while (keepCounting) {
-						// determine sample indices I want to sort, which depends on the window index
-						if (currentWindowInd == 0) {
-							// the first window is precisely WindowDur long and starts precisely at delay1
-							targStartCt = syllImCt + offset_1;
-						}
-						else {
-							// later windws have a 2 ms overlap with the previous window at the start
-							targStartCt = syllImCt + offset_1 + params.fWindowDur*currentWindowInd - 2.0;
-						}
-						// end after the current window elapses
-						targEndCt = syllImCt + offset_2 + params.fWindowDur*currentWindowInd;
-
-
-						sglxSock->waitUntilIMEC(targEndCt, IMsamplingRate, osParams); // rough wait until samples should b ready, is there any better way to do it? 
-
-						clock_gettime(batchBefore);
-
-						IM_latestCt = sglxSock->fetchImecExact(fetchBuf, osParams, targStartCt, targEndCt);
-						currBatchNumSamples = IM_latestCt - targStartCt;
-
-						{
-							Timer timer("cpu to gpu");
-							if (skip) {
-								// Skip the last minScanWindow of previous batch (the first m_lMinWindow * m_lC bits)
-								_CUDA_CALL(cudaMemcpy(d_fetchBuf, fetchBuf + minWindow * C, C * currBatchNumSamples * sizeof(float), cudaMemcpyHostToDevice));
-
-								// Increment skip counter
-								skipCounter++;
-							}
-							else {
-								_CUDA_CALL(cudaMemcpy(d_fetchBuf, fetchBuf, C * currBatchNumSamples * sizeof(float), cudaMemcpyHostToDevice));
-							}
-							_CUDA_CALL(cudaDeviceSynchronize());
-						}
-						// Calculate peak-to-peak for OutputGUI
-						// TODO: Try and make it compute P2P per channel, send it to the GUI, write GUI to display per-channel P2P, and then 
-						//			make sure the computations for P2P per channel is fast by writing custom kernel
-						p2p = P2P_calc(d_fetchBuf, C * currBatchNumSamples);
-						// Remove means
-						_CUDA_CALL(cudaMemset(d_means, 0, C * sizeof(float)));
-						{
-							Timer timer("meanRemove()");
-							meanRemove(d_fetchBuf, d_means, currBatchNumSamples, C);
-						}
-						_CUDA_CALL(cudaDeviceSynchronize());
-						// Median removal
-						{
-							Timer timer("medianRemove()");
-							medianRemove(d_fetchBuf, C, currBatchNumSamples);
-						}
-						_CUDA_CALL(cudaDeviceSynchronize());
-						// Perform a high-pass filter at 300 hz assuming the signal is at 30000 hz
-						{
-							Timer timer("highpassFilter()");
-							transpose(d_fetchBuf, d_fetchBuf2, currBatchNumSamples, C);
-							highpassFilter(d_fetchBuf2, C, currBatchNumSamples, IMsamplingRate, 300);
-						}
-						_CUDA_CALL(cudaDeviceSynchronize());
-						// Whiten the batch on device (THIS WORKS FOR SURE, DO NOT TOUCH OR WORRY ABOUT IT)
-						{
-							Timer timer("whitening()");
-							matMul(cublasHandle, d_whitening, d_fetchBuf2, d_fetchBuf, C, C, currBatchNumSamples);
-						}
-						_CUDA_CALL(cudaDeviceSynchronize());
-						// Drift correct
-						{	//KS im also worried about doing this drift from my morning recording is likely to be much worse than later in the day.
-							Timer timer("driftCorrection()");
-							matMul(cublasHandle, d_driftMatrix, d_fetchBuf, d_fetchBuf2, C, C, currBatchNumSamples);
-						}
-						_CUDA_CALL(cudaDeviceSynchronize());
-						// Perform OMP
-						numSpikes = kilosortMatchingPursuit(d_fetchBuf2, currBatchNumSamples);
-						//std::cout << "currBatch Samples= " << currBatchNumSamples << " and had numSpikes= " << numSpikes << std::endl;
-
-						// Use results of OMP to assign unmapped spike templates to the closest clusters
-						// - inputs: d_spikeTemplates, d_spikeTimes, d_residual
-						// - outputs: closest_x, closest_y
-						{
-							Timer timer("closestCluster()");// KS- im worried about this function is it just estimating spike positions? 
-							computeClosestClusters(currBatchNumSamples, numSpikes);
-						}
-
-						saveSpikes(numSpikes, targStartCt, IM_latestCt, times, templates, amplitudes); // KS this needs to go here 
-						//Timer timer("cpu to gpu");
-						int templateMatches = 0;
-						for (int templ : templates) {
-							if (targetTemplates.count(templ)) {
-								++templateMatches;
-							}
-						}
-						clock_gettime(batchAfter);
-						long processTime = GetTimeDiff(batchAfter, batchBefore);
-
-
-						bool shouldFeedback = params.bThreshMode
-							? (templateMatches > params.iThresh)// KS updated 
-							: (templateMatches <= params.iThresh);
-						if (shouldFeedback) {
-							if (offset_3 > 0) {
-								sglxSock->waitUntilIMEC(targFeedbackCt - 75, IMsamplingRate, osParams);// -2.5ms to control a bit for the time it takes to actually send the command and read by LV
-							}// KS
-							sglxSock->setDigitalOut(0);
-						}
-					}
-
-					// BRIAN adaptive thresholding
-					if (params.bAdaptiveThresh)
-					{
-						threshWindow.push_back(templateMatches);
-						if (threshWindow.size() >= params.iAdaptiveThreshWindowSize)
-						{
-							// We have collected enough iterations to take a median and compare to the current threshold value
-							std::sort(threshWindow.begin(), threshWindow.end());
-							size_t n = threshWindow.size();
-							int current_med = 0;
-							if (n % 2)
-							{ // odd array size
-								current_med = threshWindow[n / 2];
-							}
-							else { // even array size
-								current_med = (threshWindow[n / 2 - 1] + threshWindow[n / 2]) / 2;
-							}
-							// now compare the median to the current threshold and update if appropriate
-							if (
-								((current_med > params.iThresh) && (!params.bThreshMode)) // trying to "push up" firing and median is high
-								||
-								((current_med < params.iThresh) && (params.bThreshMode)) // trying to "pull down" firing and median is low
-								)
-							{
-								// update threshold
-								params.iThresh = current_med;
-							}
-							// now clear
-							threshWindow.clear();
-						}
-					}
-					// DONE WITH THRESHOLD UPDATE
-
-
-					//KS moved this so i write output every syll regardless of matches 
-					// Save the spikes into times, templates, amplitudes
-
-					writeSpikesToFile(times, templates, amplitudes);
-
-					syllLogFile << "Syllable index= " << pulsesInWindow << ", template matches=" << templateMatches
-						<< ",NI last edge sample= " << firstNiEdge << ",IM samp count at syll on= " << syllImCt
-						<< ", IM start= " << targStartCt
-						<< ", IM end=  " << IM_latestCt
-						<< ",processesing time= " << processTime << ",NI samples fetched = " << NI_latestCt - NI_processedCT
-						<< ", Threshold = " << params.iThresh << std::endl;
-					OnlineSpikesPayload payload = { recordingOffset,
-									IM_latestCt,
-									times,
-									templates,
-									amplitudes,
-									rootMeanSquared,
-									p2p,
-									processTime };
-					sendPayload(&imecFm, payload, decoderImecAddr);
-					recentEdges.clear();
-					times.clear();
-					templates.clear();
-					amplitudes.clear();
-					NI_processedCT = sglxSock->getStreamSampleCt(NIDQ, osParams);
-				}
-			}
-		}
-		NI_processedCT = NI_latestCt;
-	}
-
-	std::cout << "ive left the while loop" << std::endl;
-}
-*/
 void OnlineSpikesV2::runSpikeSorting()	
 {
 	static const char *ptLabel = { "OnlineSpikesV2::runSpikeSorting" };
