@@ -137,6 +137,7 @@ InputGUI::InputGUI(InputParameters cmdLineParams)
 	Params.sLogfilesPath = "C:\\Users\\ksnpx\\defaultLogs\\";
 	Params.bAdaptiveThresh = false;
 	Params.iAdaptiveThreshWindowSize = 21;
+	Params.bRollingWindow = false;
 	Params.bWindowMode = false;
 	Params.iNumWindows = 4;
 	Params.fWindowDur = 10.0;
@@ -528,7 +529,7 @@ void InputGUI::gatherFeedbackParameters() {
 		ImGui::SameLine(); HelpMarker("Initial number of spikes below/above (set by following tickbox) which feedback is triggered.");
 		ImGui::InputInt("##Threshold", &Params.iThresh, 1, 10);
 
-		ImGui::Checkbox("Trigger Feedback Below (unchecked) or Above (checked) Threshold.", &Params.bThreshMode);
+		ImGui::Checkbox("Trigger Feedback AT OR BELOW (unchecked) or STRICTLY ABOVE (checked) Threshold.", &Params.bThreshMode);
 
 		ImGui::Text("Syllable Number(s):");
 		ImGui::SameLine(); HelpMarker("The indices of syllables of interest as integers with spaces between.");
@@ -549,6 +550,7 @@ void InputGUI::gatherFeedbackParameters() {
 			ImGui::Text("Adaptive Threshold Window Size:");
 			ImGui::SameLine(); HelpMarker("Number of syllables over which median value is computed (odd size preferred).");
 			ImGui::InputInt("##AdaptWindow", &Params.iAdaptiveThreshWindowSize, 1, 10);
+			ImGui::Checkbox("Median updates every N samples (unchecked) or based on last N samples (rolling window, checked)", &Params.bRollingWindow);
 		}
 
 		ImGui::Checkbox("Use Windowed Spike-Counting.", &Params.bWindowMode);

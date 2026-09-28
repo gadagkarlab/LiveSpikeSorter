@@ -692,6 +692,7 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 	std::ofstream syllLogFile(params.sLogfilesPath + "syll_log.txt");
 	// used if adaptive thresholding
 	std::vector<int> threshWindow;
+	std::vector<int> sortedThreshWindow;
 	// used if performing multiple-window counting method
 	int numWindows = params.iNumWindows;
 	float windowDur = params.fWindowDur;
@@ -1106,18 +1107,21 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 			if (params.bAdaptiveThresh)
 			{
 				threshWindow.push_back(templateMatches);
+				
 				if (threshWindow.size() >= params.iAdaptiveThreshWindowSize)
 				{
 					// We have collected enough iterations to take a median and compare to the current threshold value
-					std::sort(threshWindow.begin(), threshWindow.end());
-					size_t n = threshWindow.size();
+					// we copy to a new vector because in the case of rolling window we don't want the original vector to be sorted by value but by time
+					sortedThreshWindow = threshWindow;
+					std::sort(sortedThreshWindow.begin(), sortedThreshWindow.end());
+					size_t n = sortedThreshWindow.size();
 					int current_med = 0;
 					if (n % 2)
 					{ // odd array size
-						current_med = threshWindow[n / 2];
+						current_med = sortedThreshWindow[n / 2];
 					}
 					else { // even array size
-						current_med = (threshWindow[n / 2 - 1] + threshWindow[n / 2]) / 2;
+						current_med = (sortedThreshWindow[n / 2 - 1] + sortedThreshWindow[n / 2]) / 2;
 					}
 					// now compare the median to the current threshold and update if appropriate
 					if (
@@ -1129,8 +1133,19 @@ void OnlineSpikesV2::runSyllDetectThenSorting(InputParameters params) {
 						// update threshold
 						params.iThresh = current_med;
 					}
-					// now clear
-					threshWindow.clear();
+					// now clear the sorted vector
+					sortedThreshWindow.clear();
+					
+					if (params.bRollingWindow) // rolling
+					{
+						// if we are in rolling window mode, we want to get rid of the oldest element and keep the rest.
+						threshWindow.erase(threshWindow.begin());
+					}
+					else // non-overlapping
+					{
+						// if we are using non-overlapping windows, we want to clear the whole thing and start over.
+						threshWindow.clear();
+					}
 				}
 			}
 			// DONE WITH THRESHOLD UPDATE
@@ -1679,7 +1694,7 @@ void OnlineSpikesV2::saveSpikes(
 
 	//Loop over found spikes
 	for (long i = 0; i < numSpikes; i++) {
-		sampleInd = spikeTimes[i] - M / 2 - M + nt0min; // just copying kilosort here
+		sampleInd = spikeTimes[i] - M / 2 + nt0min; // just copying kilosort here // KS removed extra M 
 		amplitude = spikeAmplitudes[i];
 		templateInd = closestCluster(closest_x[i], closest_y[i]);
 

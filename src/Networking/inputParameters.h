@@ -73,6 +73,7 @@ struct InputParameters {
 		bFeedbackMode, // BRIAN
 		bThreshMode, // BRIAN
 		bAdaptiveThresh, // BRIAN
+		bRollingWindow, // BRIAN
 		bWindowMode, // BRIAN
 		bSmallskip;
 
